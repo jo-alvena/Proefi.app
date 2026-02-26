@@ -1,157 +1,76 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PROEFI - Produção Eficiente</title>
+  <meta charset="UTF-8">
+  <title>PROEFI</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+    const firebaseConfig = {
+      apiKey: "SUA_API_KEY",
+      authDomain: "proefi-alvena.firebaseapp.com",
+      projectId: "proefi-alvena",
+      storageBucket: "proefi-alvena.firebasestorage.app",
+      messagingSenderId: "1084612497727",
+      appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
+    };
 
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-<style>
-body{
-font-family: Arial, sans-serif;
-background:#0f172a;
-color:white;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-margin:0;
-}
-.container{
-background:#1e293b;
-padding:30px;
-border-radius:12px;
-width:350px;
-}
-input{
-width:100%;
-padding:10px;
-margin-bottom:10px;
-border:none;
-border-radius:6px;
-}
-button{
-width:100%;
-padding:12px;
-margin-bottom:8px;
-border:none;
-border-radius:6px;
-font-weight:bold;
-cursor:pointer;
-}
-.login{background:#22c55e;}
-.logout{background:#ef4444;}
-.call{background:#3b82f6;}
-.wa{background:#25D366;}
-.sms{background:#8b5cf6;}
-.mail{background:#f59e0b;}
-</style>
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        document.body.innerHTML = "<h2>Faça login primeiro.</h2>";
+        return;
+      }
+
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        document.body.innerHTML = "<h2>Usuário não autorizado.</h2>";
+        return;
+      }
+
+      const dados = userSnap.data();
+
+      if (dados.role === "gerente") {
+        mostrarGerente(user.email);
+      } else {
+        mostrarCorretor(user.email);
+      }
+    });
+
+    function mostrarGerente(email) {
+      document.body.innerHTML = `
+        <h1>PROEFI - GERENTE</h1>
+        <p>${email}</p>
+        <button onclick="logout()">Sair</button>
+        <hr>
+        <h3>Painel de Upload de Leads (em breve)</h3>
+      `;
+    }
+
+    function mostrarCorretor(email) {
+      document.body.innerHTML = `
+        <h1>PROEFI - CORRETOR</h1>
+        <p>${email}</p>
+        <button onclick="logout()">Sair</button>
+        <hr>
+        <h3>Distribuição automática em breve</h3>
+      `;
+    }
+
+    window.logout = function() {
+      signOut(auth);
+      location.reload();
+    }
+  </script>
 </head>
 <body>
-
-<div class="container" id="loginBox">
-<h2>PROEFI Login</h2>
-<input type="email" id="email" placeholder="Email">
-<input type="password" id="password" placeholder="Senha">
-<button class="login" onclick="login()">Entrar</button>
-</div>
-
-<div class="container" id="appBox" style="display:none;">
-<h2>PROEFI</h2>
-<p id="userName"></p>
-
-<input type="text" id="leadNome" placeholder="Nome do Lead">
-<input type="text" id="leadTelefone" placeholder="Telefone">
-<input type="text" id="leadEmail" placeholder="Email">
-
-<button class="call" onclick="ligar()">📞 LIGAR</button>
-<button class="wa" onclick="whatsapp()">💬 WHATSAPP</button>
-<button class="sms" onclick="sms()">📩 SMS</button>
-<button class="mail" onclick="email()">📧 EMAIL</button>
-
-<button class="logout" onclick="logout()">Sair</button>
-</div>
-
-<script type="module">
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
-  authDomain: "proefi-alvena.firebaseapp.com",
-  projectId: "proefi-alvena",
-  storageBucket: "proefi-alvena.firebasestorage.app",
-  messagingSenderId: "1084612497727",
-  appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-window.login = async function(){
-const email = document.getElementById("email").value;
-const password = document.getElementById("password").value;
-
-try{
-const userCredential = await signInWithEmailAndPassword(auth,email,password);
-document.getElementById("loginBox").style.display="none";
-document.getElementById("appBox").style.display="block";
-document.getElementById("userName").innerText="Usuário: "+userCredential.user.email;
-}catch(error){
-alert("Erro: " + error.code + " | " + error.message);
-console.log(error);
-}
-}
-
-window.logout = async function(){
-await signOut(auth);
-location.reload();
-}
-
-async function salvarLog(tipo){
-const nome = document.getElementById("leadNome").value;
-const telefone = document.getElementById("leadTelefone").value;
-const email = document.getElementById("leadEmail").value;
-
-await addDoc(collection(db,"logs"),{
-usuario: auth.currentUser.email,
-leadNome: nome,
-telefone: telefone,
-email: email,
-canal: tipo,
-data: new Date()
-});
-}
-
-window.ligar = function(){
-const tel = document.getElementById("leadTelefone").value;
-salvarLog("Ligação");
-window.location.href="tel:"+tel;
-}
-
-window.whatsapp = function(){
-const tel = document.getElementById("leadTelefone").value;
-const nome = document.getElementById("leadNome").value;
-salvarLog("WhatsApp");
-window.open("https://api.whatsapp.com/send?phone=55"+tel+"&text=Olá "+nome,"_blank");
-}
-
-window.sms = function(){
-const tel = document.getElementById("leadTelefone").value;
-salvarLog("SMS");
-window.location.href="sms:"+tel;
-}
-
-window.email = function(){
-const mail = document.getElementById("leadEmail").value;
-salvarLog("Email");
-window.location.href="mailto:"+mail;
-}
-
-</script>
+  <h2>Carregando...</h2>
 </body>
 </html>
