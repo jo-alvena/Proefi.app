@@ -1,29 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>PROEFI</title>
+  <meta charset="UTF-8">
+  <title>PROEFI</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
+<body>
+  <div id="app">Carregando...</div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { 
-  getFirestore, 
-  doc, 
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  updateDoc
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+<script>
 const firebaseConfig = {
   apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
   authDomain: "proefi-alvena.firebaseapp.com",
@@ -33,128 +20,144 @@ const firebaseConfig = {
   appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const app = document.getElementById("app");
 
-window.login = async function() {
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
-
-  try {
-    await signInWithEmailAndPassword(auth, email, senha);
-  } catch (error) {
-    alert(error.message);
-  }
-};
-
-window.cadastrar = async function() {
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
-
-  try {
-    await createUserWithEmailAndPassword(auth, email, senha);
-    alert("Usuário criado. Aguarde liberação do gerente.");
-  } catch (error) {
-    alert(error.message);
-  }
-};
-
-window.logout = function() {
-  signOut(auth);
-};
-
-onAuthStateChanged(auth, async (user) => {
+auth.onAuthStateChanged(async (user) => {
   if (!user) {
     mostrarLogin();
-    return;
-  }
-
-  const userRef = doc(db, "users", user.uid);
-  const userSnap = await getDoc(userRef);
-
-  if (!userSnap.exists()) {
-    document.body.innerHTML = "<h2>Usuário não autorizado.</h2><button onclick='logout()'>Sair</button>";
-    return;
-  }
-
-  const dados = userSnap.data();
-
-  if (dados.role === "gerente") {
-    mostrarGerente(user.email);
   } else {
-    mostrarCorretor(user.email);
+    const doc = await db.collection("users").doc(user.uid).get();
+    if (!doc.exists) {
+      app.innerHTML = "Usuário não autorizado.";
+      return;
+    }
+
+    const tipo = doc.data().tipo;
+
+    if (tipo === "gerente") {
+      mostrarGerente(user.email);
+    } else {
+      mostrarCorretor(user.email);
+    }
   }
 });
 
 function mostrarLogin() {
-  document.body.innerHTML = `
+  app.innerHTML = `
     <h2>PROEFI</h2>
     <input id="email" placeholder="Email"><br><br>
     <input id="senha" type="password" placeholder="Senha"><br><br>
     <button onclick="login()">Entrar</button>
-    <button onclick="cadastrar()">Criar Conta</button>
   `;
 }
 
+function login() {
+  const email = document.getElementById("email").value;
+  const senha = document.getElementById("senha").value;
+
+  auth.signInWithEmailAndPassword(email, senha)
+    .catch(e => alert(e.message));
+}
+
+function logout() {
+  auth.signOut();
+}
+
 function mostrarGerente(email) {
-  document.body.innerHTML = `
-    <h1>PROEFI - GERENTE</h1>
+  app.innerHTML = `
+    <h2>PROEFI - GERENTE</h2>
     <p>${email}</p>
     <button onclick="logout()">Sair</button>
-    <hr>
-    <h3>Painel de Upload em breve</h3>
   `;
 }
 
 function mostrarCorretor(email) {
-  document.body.innerHTML = `
-    <h1>PROEFI - CORRETOR</h1>
+  app.innerHTML = `
+    <h2>PROEFI - CORRETOR</h2>
     <p>${email}</p>
-    <button onclick="logout()">Sair</button>
-    <hr>
     <button onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
-    <div id="leadArea"></div>
+    <div id="leadAtual"></div>
+    <button onclick="logout()">Sair</button>
   `;
 }
 
-window.pegarLead = async function() {
+window.pegarLead = async function () {
+  const snapshot = await db.collection("leads")
+    .where("status", "==", "fila")
+    .limit(1)
+    .get();
 
-  const leadsRef = collection(db, "leads");
-  const q = query(leadsRef, where("status", "==", "fila"));
-  const querySnapshot = await getDocs(q);
-
-  if (querySnapshot.empty) {
-    alert("Sem leads disponíveis.");
+  if (snapshot.empty) {
+    alert("SEM LEADS DISPONÍVEIS");
     return;
   }
 
-  const leads = [];
-  querySnapshot.forEach((docSnap) => {
-    leads.push({ id: docSnap.id, ...docSnap.data() });
-  });
+  const doc = snapshot.docs[0];
+  const leadRef = db.collection("leads").doc(doc.id);
 
-  const leadAleatorio = leads[Math.floor(Math.random() * leads.length)];
-
-  const leadRef = doc(db, "leads", leadAleatorio.id);
-  await updateDoc(leadRef, {
+  await leadRef.update({
     status: "em_atendimento",
     corretorId: auth.currentUser.uid,
     timestampDistribuicao: Date.now()
   });
 
-  document.getElementById("leadArea").innerHTML = `
-    <h3>Lead Atual</h3>
-    <p><strong>Nome:</strong> ${leadAleatorio.nome}</p>
-    <p><strong>Telefone:</strong> ${leadAleatorio.telefone}</p>
-    <p><strong>Email:</strong> ${leadAleatorio.email}</p>
-  `;
+  mostrarLead(doc.id, doc.data());
 };
 
-</script>
-</head>
+function mostrarLead(id, data) {
+  const div = document.getElementById("leadAtual");
 
-<body>
-<h2>Carregando...</h2>
+  div.innerHTML = `
+    <h3>${data.nome}</h3>
+    <p>Telefone: ${data.telefone}</p>
+    <p>Email: ${data.email}</p>
+    <p id="contador"></p>
+    <button onclick="finalizarLead('${id}', 'atendeu')">ATENDEU</button>
+    <button onclick="finalizarLead('${id}', 'nao_atendeu')">NÃO ATENDEU</button>
+  `;
+
+  iniciarTimer(id);
+}
+
+window.finalizarLead = async function (id, resultado) {
+  await db.collection("leads").doc(id).update({
+    status: "finalizado",
+    resultado: resultado
+  });
+
+  document.getElementById("leadAtual").innerHTML = "";
+};
+
+function iniciarTimer(id) {
+  const tempoMaximo = 20 * 60 * 1000;
+  const inicio = Date.now();
+
+  const intervalo = setInterval(async () => {
+    const agora = Date.now();
+    const restante = tempoMaximo - (agora - inicio);
+
+    if (restante <= 0) {
+      clearInterval(intervalo);
+
+      await db.collection("leads").doc(id).update({
+        status: "fila",
+        corretorId: "",
+        timestampDistribuicao: 0
+      });
+
+      document.getElementById("leadAtual").innerHTML = "";
+      alert("Tempo expirado. Lead voltou para fila.");
+    } else {
+      const minutos = Math.floor(restante / 60000);
+      const segundos = Math.floor((restante % 60000) / 1000);
+      document.getElementById("contador").innerText =
+        `Tempo restante: ${minutos}:${segundos.toString().padStart(2, '0')}`;
+    }
+  }, 1000);
+}
+</script>
 </body>
 </html>
