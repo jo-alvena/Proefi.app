@@ -124,14 +124,21 @@ async function naoAtendeu(){
 if(!leadAtual) return alert("Nenhum lead ativo");
 
 await leadAtual.ref.update({
-status:"finalizado",
-atendeu:false,
-timestampFinalizacao:Date.now()
+status:"fila",
+corretorId:null,
+timestampDistribuicao:null,
+timestampFinalizacao:null,
+atendeu:null,
+resultado:null,
+observacao:null,
+dataAgendada:null
 });
 
 leadAtual=null;
 document.getElementById("leadCard").innerHTML=
 `<button class="btn-azul" onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>`;
+
+alert("Lead devolvido para fila.");
 }
 
 function marcarAtendeu(){
@@ -140,11 +147,9 @@ if(!leadAtual) return alert("Nenhum lead ativo");
 document.getElementById("leadCard").innerHTML+=`
 <div id="detalhes">
 <h3>Resultado Obrigatório</h3>
-
 <button class="btn-roxo" onclick="agendamento()">📅 AGENDAMENTO</button>
 <button class="btn-roxo" onclick="promessa()">PROMESSA DE DOCUMENTAÇÃO</button>
 <button class="btn-roxo" onclick="semInteresse()">NÃO GEROU INTERESSE</button>
-
 <div id="extra"></div>
 </div>`;
 }
@@ -159,7 +164,6 @@ document.getElementById("extra").innerHTML=`
 async function confirmarAgendamento(){
 const data=document.getElementById("dataAg").value;
 const hora=document.getElementById("horaAg").value;
-
 if(!data || !hora) return alert("Preencha data e hora");
 
 await leadAtual.ref.update({
@@ -177,7 +181,7 @@ document.getElementById("leadCard").innerHTML=
 
 function promessa(){
 document.getElementById("extra").innerHTML=`
-<textarea id="obs" placeholder="Observação (opcional)"></textarea>
+<textarea id="obs" placeholder="Observação opcional"></textarea>
 <button onclick="confirmarPromessa()">CONFIRMAR</button>`;
 }
 
