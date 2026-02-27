@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>PROEFI - ALVENA</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -11,949 +11,354 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <style>
-  :root{
-    --blue:#21346C;
-    --gold:#BC8A0B;
-    --white:#FFFFFF;
-
-    --greenLight:#B9F6CA;
-    --redLight:#FFCCCB;
-
-    --cardShadow: 0 6px 18px rgba(0,0,0,0.12);
-  }
-
-  *{box-sizing:border-box}
-  body{
-    margin:0;
-    font-family: Arial, sans-serif;
-    background: var(--blue);
-    color: var(--white);
-  }
-
-  .wrap{
-    max-width:520px;
-    margin:0 auto;
-    padding:18px;
-  }
-
-  .brand{
-    text-align:center;
-    margin-top:10px;
-    margin-bottom:18px;
-  }
-  .brand h1{
-    margin:0;
-    font-size:28px;
-    letter-spacing:0.5px;
-    color: var(--gold);
-  }
-  .brand .sub{
-    margin-top:6px;
-    line-height:1.25;
-    color: var(--white);
-    opacity:0.95;
-    font-size:14px;
-  }
-
-  .card{
-    background: var(--white);
-    color: var(--blue);
-    border-radius:14px;
-    padding:16px;
-    box-shadow: var(--cardShadow);
-    margin-bottom:14px;
-  }
-
-  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-  .grow{flex:1}
-
-  input, select, textarea{
-    width:100%;
-    padding:12px;
-    border-radius:10px;
-    border:1px solid rgba(33,52,108,0.25);
-    font-size:16px;
-    outline:none;
-  }
-  textarea{min-height:90px; resize:vertical}
-
-  .fieldLabel{
-    font-size:12px;
-    opacity:0.85;
-    margin-bottom:6px;
-    margin-top:12px;
-  }
-
-  .btn{
-    width:100%;
-    padding:14px;
-    border:none;
-    border-radius:12px;
-    font-size:16px;
-    font-weight:800;
-    cursor:pointer;
-  }
-  .btnGold{ background: var(--gold); color: var(--white); }
-  .btnBlue{ background: var(--blue); color: var(--white); }
-  .btnGreen{ background: var(--greenLight); color: var(--blue); }
-  .btnRed{ background: var(--redLight); color: var(--blue); }
-
-  .btnGhost{
-    background: transparent;
-    color: var(--blue);
-    border:2px solid rgba(33,52,108,0.25);
-  }
-
-  .pill{
-    display:inline-block;
-    padding:6px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:700;
-    background: rgba(188,138,11,0.12);
-    color: var(--blue);
-  }
-
-  .muted{opacity:0.75}
-  .small{font-size:12px}
-  .divider{height:1px; background:rgba(33,52,108,0.12); margin:12px 0}
-  .center{text-align:center}
-
-  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-  @media (max-width:420px){
-    .grid3{grid-template-columns:1fr}
-  }
-
-  a{ text-decoration:none; }
-  .danger{color:#b00020; font-weight:700}
-  .ok{color:#0b6b2b; font-weight:700}
+:root{
+ --blue:#21346C;
+ --gold:#BC8A0B;
+ --white:#fff;
+ --green:#B9F6CA;
+ --red:#FFCCCB;
+}
+body{
+ margin:0;
+ font-family:Arial;
+ background:var(--blue);
+ color:white;
+}
+.wrap{max-width:520px;margin:auto;padding:12px;}
+.card{
+ background:white;
+ color:#21346C;
+ border-radius:12px;
+ padding:12px;
+ margin-bottom:10px;
+}
+.btn{
+ width:100%;
+ padding:12px;
+ border:none;
+ border-radius:10px;
+ font-weight:700;
+ margin-top:8px;
+}
+.btnGold{background:var(--gold);color:white;}
+.btnBlue{background:var(--blue);color:white;}
+.btnGreen{background:var(--green);}
+.btnRed{background:var(--red);}
+.menu{
+ position:fixed;
+ bottom:0;left:0;right:0;
+ background:#fff;
+ display:flex;
+ justify-content:space-around;
+ border-top:1px solid #ddd;
+}
+.menu button{
+ flex:1;
+ border:none;
+ background:white;
+ padding:12px;
+ font-weight:bold;
+}
+.hidden{display:none;}
+h2{margin:4px 0;}
+.small{font-size:12px;opacity:.7}
 </style>
 </head>
 
 <body>
-  <div class="wrap" id="app">Carregando...</div>
+<div class="wrap" id="app">Carregando...</div>
 
 <script>
-/** =========================
- *  Firebase Config
- *  ========================= */
-const firebaseConfig = {
-  apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
-  authDomain: "proefi-alvena.firebaseapp.com",
-  projectId: "proefi-alvena",
-  storageBucket: "proefi-alvena.firebasestorage.app",
-  messagingSenderId: "1084612497727",
-  appId: "1:1084612497727:web:d9b1de2962cce8123b038a",
-  measurementId: "G-SZPXEMV5B4"
+/* ================= FIREBASE ================= */
+const firebaseConfig={
+ apiKey:"AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
+ authDomain:"proefi-alvena.firebaseapp.com",
+ projectId:"proefi-alvena",
+ storageBucket:"proefi-alvena.firebasestorage.app",
+ messagingSenderId:"1084612497727",
+ appId:"1:1084612497727:web:d9b1de2962cce8123b038a"
 };
-
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db   = firebase.firestore();
+const auth=firebase.auth();
+const db=firebase.firestore();
 
-/** =========================
- *  State
- *  ========================= */
-let loginTimestamp = null;   // quando o corretor logou (para relatório)
-let leadAtualRef   = null;   // firestore DocumentReference do lead em atendimento
-let leadAtualData  = null;   // snapshot data
-let detailsOpen    = false;  // painel de "ATENDEU" aberto
+/* ================= STATE ================= */
+let userData=null;
+let leadAtual=null;
+let loginStart=Date.now();
+let currentTab="painel";
 
-/** =========================
- *  Helpers
- *  ========================= */
-function $(id){ return document.getElementById(id); }
-function nowMs(){ return Date.now(); }
-function cleanPhone(raw){ return String(raw || "").replace(/\D/g,''); }
+/* ================= HELPERS ================= */
+function $(id){return document.getElementById(id);}
+function cleanPhone(v){return String(v||"").replace(/\D/g,"");}
+function now(){return Date.now();}
 
-function templateMessage(msg, lead){
-  const nome = lead?.nome || "";
-  const tel  = lead?.telefone || "";
-  const em   = lead?.email || "";
-  return String(msg || "")
-    .replaceAll("{{nome}}", nome)
-    .replaceAll("{{telefone}}", tel)
-    .replaceAll("{{email}}", em);
+function msgTemplate(msg,lead){
+ return msg
+  .replaceAll("{{nome}}",lead.nome||"")
+  .replaceAll("{{telefone}}",lead.telefone||"")
+  .replaceAll("{{email}}",lead.email||"");
 }
 
-function dayKey(ts){
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const da = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${da}`;
-}
-
-async function getUserDoc(uid){
-  const snap = await db.collection("users").doc(uid).get();
-  return snap.exists ? snap.data() : null;
-}
-
-/** =========================
- *  Login UI
- *  ========================= */
+/* ================= LOGIN ================= */
 function renderLogin(){
-  const el = $("app");
-  el.innerHTML = `
-    <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">
-        Produção Eficiente<br/>
-        Alvena Soluções Imobiliárias
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="fieldLabel">Email</div>
-      <input id="email" placeholder="Digite seu email" style="border:2px solid var(--gold)" />
-
-      <div class="fieldLabel">Senha</div>
-      <input id="senha" type="password" placeholder="Digite sua senha" style="border:2px solid var(--gold)" />
-
-      <button class="btn btnGold" style="margin-top:14px" onclick="doLogin()">ENTRAR</button>
-      <div class="divider"></div>
-      <div class="small muted center">Acesso interno • PROEFI - ALVENA</div>
-    </div>
-  `;
+ $("app").innerHTML=`
+ <div style="text-align:center;margin-top:20px">
+   <h2 style="color:#BC8A0B">PROEFI - ALVENA</h2>
+   <div>Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
+ </div>
+ <div class="card">
+   <input id="email" placeholder="Email"/><br/><br/>
+   <input id="senha" type="password" placeholder="Senha"/>
+   <button class="btn btnGold" onclick="doLogin()">ENTRAR</button>
+ </div>`;
 }
 
-window.doLogin = async function(){
-  const email = $("email").value.trim();
-  const senha = $("senha").value;
-  try{
-    await auth.signInWithEmailAndPassword(email, senha);
-  }catch(e){
-    alert(e.message);
-  }
-};
-
-function renderUnauthorized(){
-  $("app").innerHTML = `
-    <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
-    </div>
-    <div class="card">
-      <div class="danger">Usuário não autorizado (cadastro não encontrado em users).</div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="auth.signOut()">Sair</button>
-    </div>
-  `;
-}
-
-/** =========================
- *  Active status (corretor)
- *  ========================= */
-async function setActiveStatus(uid, ativo){
-  await db.collection("users").doc(uid).update({
-    ativo: !!ativo,
-    ativoAtualizadoEm: nowMs()
-  });
-}
-
-function activeBadge(ativo){
-  if(ativo) return `<span class="pill">ATIVO</span>`;
-  return `<span class="pill" style="background:rgba(255,204,203,0.6)">PAUSADO</span>`;
-}
-
-/** =========================
- *  Upload & Import (XLS/XLSX/CSV)
- *  ========================= */
-function parseSheetRows(workbook){
-  const sheetName = workbook.SheetNames[0];
-  const ws = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
-  const clean = rows.filter(r => r && r.some(cell => String(cell).trim() !== ""));
-  return clean;
-}
-
-function detectHeaderRow(rows){
-  const keys = ["nome","telefone","celular","contato","email","e-mail"];
-  for(let i=0;i<Math.min(5, rows.length);i++){
-    const row = rows[i].map(c=>String(c).toLowerCase().trim());
-    const hit = row.some(c => keys.includes(c));
-    if(hit) return i;
-  }
-  return 0;
-}
-
-function mapLeadColumns(row){
-  const nome = String(row[0] || "").trim();
-  const telefone = String(row[1] || "").trim();
-  const email = String(row[2] || "").trim();
-  return { nome, telefone, email };
-}
-
-function makeLeadDoc(base){
-  return {
-    nome: base.nome || "",
-    telefone: base.telefone || "",
-    email: base.email || "",
-    status: "fila",
-    corretorId: null,
-    criadoEm: nowMs(),
-    atualizadoEm: nowMs(),
-    emAtendimentoEm: null,
-    timestampDistribuicao: null,
-    timestampFinalizacao: null,
-    atendeu: null,
-    resultado: null,
-    observacao: null,
-    dataAgendada: null,
-    totalTentativas: 0,
-    origem: null,        // geral | gerente | corretor
-    equipe: null,        // string
-    donoUpload: null,    // uid
-    listaRef: null       // id da lista
-  };
-}
-
-async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distribuirGeralAgora }){
-  const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: "array" });
-  const rows = parseSheetRows(workbook);
-  if(rows.length === 0) throw new Error("Planilha vazia.");
-
-  const headerIndex = detectHeaderRow(rows);
-  const dataRows = rows.slice(headerIndex + 1);
-
-  const parsed = [];
-  for(const r of dataRows){
-    const lead = mapLeadColumns(r);
-    if(!lead.nome && !lead.telefone && !lead.email) continue;
-    if(!lead.telefone) continue;
-    parsed.push(lead);
-  }
-  if(parsed.length === 0) throw new Error("Nenhum lead válido (verifique colunas A/B/C).");
-
-  const listaDoc = await db.collection("listas").add({
-    origem,
-    equipe: equipe || null,
-    donoUpload: donoUploadUid,
-    arquivoNome: file.name,
-    total: parsed.length,
-    criadoEm: nowMs()
-  });
-  const listaRefId = listaDoc.id;
-
-  let corretoresAtivos = [];
-  if(origem === "geral" && distribuirGeralAgora){
-    const snap = await db.collection("users")
-      .where("role","==","corretor")
-      .where("ativo","==",true)
-      .get();
-    corretoresAtivos = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    if(corretoresAtivos.length === 0){
-      throw new Error("Nenhum corretor ATIVO no momento. Peça para os corretores clicarem 'ESTOU ATIVO' antes do upload da lista geral.");
-    }
-  }
-
-  const batchSize = 400;
-  let idx = 0;
-
-  while(idx < parsed.length){
-    const batch = db.batch();
-    const slice = parsed.slice(idx, idx + batchSize);
-
-    for(const leadBase of slice){
-      const docRef = db.collection("leads").doc();
-      const doc = makeLeadDoc(leadBase);
-
-      doc.origem = origem;
-      doc.equipe = equipe || null;
-      doc.donoUpload = donoUploadUid;
-      doc.listaRef = listaRefId;
-
-      if(origem === "geral" && distribuirGeralAgora){
-        const chosen = corretoresAtivos[Math.floor(Math.random() * corretoresAtivos.length)];
-        doc.corretorId = chosen.uid;
-        doc.status = "fila";
-      }
-
-      batch.set(docRef, doc);
-    }
-
-    await batch.commit();
-    idx += batchSize;
-  }
-
-  return { total: parsed.length, listaRefId };
-}
-
-/** =========================
- *  Lead selection per source
- *  ========================= */
-async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
-  let q = db.collection("leads").where("status","==","fila");
-
-  if(source === "geral"){
-    q = q.where("origem","==","geral").where("corretorId","==",corretorUid);
-  }else if(source === "gerente"){
-    q = q.where("origem","==","gerente").where("equipe","==",equipeCorretor).where("corretorId","==",null);
-  }else{
-    q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
-  }
-
-  const snap = await q.limit(1).get();
-  if(snap.empty) return null;
-
-  const docSnap = snap.docs[0];
-  const ref = docSnap.ref;
-
-  await ref.update({
-    status: "em atendimento",
-    corretorId: corretorUid,
-    emAtendimentoEm: nowMs(),
-    timestampDistribuicao: nowMs(),
-    atualizadoEm: nowMs(),
-    totalTentativas: firebase.firestore.FieldValue.increment(1)
-  });
-
-  const fresh = await ref.get();
-  return { ref, data: fresh.data() };
-}
-
-/** =========================
- *  UI - Header
- *  ========================= */
-function renderHeader(userEmail, role, extraHtml=""){
-  return `
-    <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
-    </div>
-    <div class="card">
-      <div class="row">
-        <div class="grow">
-          <div><b>${role.toUpperCase()}</b></div>
-          <div class="small muted">${userEmail}</div>
-        </div>
-        ${extraHtml}
-      </div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="auth.signOut()">SAIR</button>
-    </div>
-  `;
-}
-
-/** =========================
- *  Director / Manager / Broker screens
- *  ========================= */
-function renderDiretor(user, userData){
-  const el = $("app");
-  el.innerHTML = `
-    ${renderHeader(user.email, "diretor")}
-    <div class="card">
-      <div><b>Upload • Lista Geral</b></div>
-      <div class="small muted">Aceita XLS/XLSX/CSV. Colunas: Nome | Telefone | Email</div>
-      <div class="divider"></div>
-      <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
-      <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
-      <div class="small muted">Distribui ALEATORIAMENTE no upload para corretores <b>ATIVOS</b>.</div>
-    </div>
-  `;
-}
-
-function renderGerente(user, userData){
-  const equipe = userData?.equipe || "equipe1";
-  const el = $("app");
-  el.innerHTML = `
-    ${renderHeader(user.email, "gerente", `<div class="pill">Equipe: ${equipe}</div>`)}
-    <div class="card">
-      <div><b>Upload • Lista do Gerente</b></div>
-      <div class="small muted">A fila ficará disponível para sua equipe.</div>
-      <div class="divider"></div>
-      <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
-      <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR LISTA DA EQUIPE</button>
-      <div class="small muted">Leads entram em <b>fila</b> da equipe (${equipe}).</div>
-    </div>
-
-    <div class="card">
-      <div><b>Gerente • Email para relatórios</b></div>
-      <div class="small muted">Usado para o corretor enviar o relatório (email pronto).</div>
-      <div class="divider"></div>
-      <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${userData?.emailRelatorio || ""}" />
-      <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
-    </div>
-  `;
-}
-
-function renderCorretor(user, userData){
-  const equipe = userData?.equipe || "equipe1";
-  const ativo  = !!userData?.ativo;
-
-  loginTimestamp = nowMs();
-
-  const el = $("app");
-  el.innerHTML = `
-    ${renderHeader(user.email, "corretor", `<div>${activeBadge(ativo)}</div>`)}
-    
-    <div class="card">
-      <div class="row">
-        <div class="grow">
-          <div><b>Status de atendimento</b></div>
-          <div class="small muted">Somente corretores ATIVOS entram na distribuição geral.</div>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div class="grid2">
-        <button class="btn btnGreen" onclick="setMeActive(true)">🟢 ESTOU ATIVO</button>
-        <button class="btn btnRed" onclick="setMeActive(false)">🔴 PAUSAR</button>
-      </div>
-      <div class="divider"></div>
-      <div class="small muted">Equipe: <b>${equipe}</b></div>
-    </div>
-
-    <div class="card">
-      <div><b>Fonte de Leads</b></div>
-      <div class="small muted">Escolha a lista que você quer bater agora.</div>
-      <div class="divider"></div>
-      <select id="leadSource">
-        <option value="geral">Lista Geral (Diretoria)</option>
-        <option value="gerente">Lista do Gerente (Equipe)</option>
-        <option value="minha">Minha Lista (Corretor)</option>
-      </select>
-      <button class="btn btnGold" onclick="pegarProximoLead()">PEGAR PRÓXIMO LEAD</button>
-    </div>
-
-    <div class="card" id="leadArea">
-      <div class="center muted">Nenhum lead em atendimento.</div>
-    </div>
-
-    <div class="card">
-      <div><b>Mensagem Padrão (WhatsApp/SMS/Email)</b></div>
-      <div class="small muted">Use: {{nome}} {{telefone}} {{email}}</div>
-      <div class="divider"></div>
-      <textarea id="msgPadrao" placeholder="Digite sua mensagem padrão...">${userData?.mensagemPadrao || "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse."}</textarea>
-      <button class="btn btnBlue" onclick="salvarMensagemPadrao()">SALVAR MENSAGEM</button>
-    </div>
-
-    <div class="card">
-      <div><b>Upload • Minha Lista (Corretor)</b></div>
-      <div class="small muted">Você pode anexar uma lista própria para bater.</div>
-      <div class="divider"></div>
-      <input type="file" id="fileCorretor" accept=".xls,.xlsx,.csv" />
-      <button class="btn btnBlue" onclick="uploadListaCorretor()">ENVIAR MINHA LISTA</button>
-    </div>
-
-    <div class="card">
-      <div><b>Relatório do Operador</b></div>
-      <div class="small muted">Gera Excel (Resumo + Atendidos). Total de ligações inclui "não atendeu".</div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="gerarRelatorioExcel()">📊 GERAR RELATÓRIO (EXCEL)</button>
-      <button class="btn btnGhost" onclick="prepararEmailRelatorio()">✉️ ENVIAR RELATÓRIO (EMAIL)</button>
-    </div>
-  `;
-}
-
-/** =========================
- *  Actions
- *  ========================= */
-window.uploadListaGeral = async function(){
-  const file = $("fileDiretor")?.files?.[0];
-  if(!file) return alert("Selecione um arquivo.");
-  try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "diretor") return alert("Apenas DIRETOR pode subir lista geral.");
-    const r = await uploadLeadsFromFile({
-      file, origem:"geral", equipe:null, donoUploadUid:user.uid, distribuirGeralAgora:true
-    });
-    alert(`Lista geral enviada! Total: ${r.total}. Distribuída para corretores ativos.`);
-    $("fileDiretor").value = "";
-  }catch(e){
-    alert(e.message);
-  }
-};
-
-window.uploadListaGerente = async function(){
-  const file = $("fileGerente")?.files?.[0];
-  if(!file) return alert("Selecione um arquivo.");
-  try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "gerente") return alert("Apenas GERENTE pode subir esta lista.");
-    const equipe = me.equipe || "equipe1";
-    const r = await uploadLeadsFromFile({
-      file, origem:"gerente", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false
-    });
-    alert(`Lista da equipe enviada! Total: ${r.total}.`);
-    $("fileGerente").value = "";
-  }catch(e){
-    alert(e.message);
-  }
-};
-
-window.uploadListaCorretor = async function(){
-  const file = $("fileCorretor")?.files?.[0];
-  if(!file) return alert("Selecione um arquivo.");
-  try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "corretor") return alert("Apenas CORRETOR pode subir lista própria.");
-    const equipe = me.equipe || "equipe1";
-    const r = await uploadLeadsFromFile({
-      file, origem:"corretor", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false
-    });
-    alert(`Sua lista foi enviada! Total: ${r.total}.`);
-    $("fileCorretor").value = "";
-  }catch(e){
-    alert(e.message);
-  }
-};
-
-window.salvarEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const email = ($("emailRelatorio").value || "").trim();
-  if(!email) return alert("Digite o email do gerente para relatórios.");
-  await db.collection("users").doc(user.uid).update({ emailRelatorio: email });
-  alert("Email de relatórios salvo!");
-};
-
-window.setMeActive = async function(ativo){
-  const user = auth.currentUser;
-  await setActiveStatus(user.uid, ativo);
-  const me = await getUserDoc(user.uid);
-  renderCorretor(user, me);
-};
-
-window.salvarMensagemPadrao = async function(){
-  const user = auth.currentUser;
-  const msg = $("msgPadrao").value || "";
-  await db.collection("users").doc(user.uid).update({ mensagemPadrao: msg });
-  alert("Mensagem padrão salva!");
-};
-
-window.pegarProximoLead = async function(){
-  if(leadAtualRef) return alert("Você já está com um lead em atendimento. Finalize antes de pegar outro.");
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  const source = $("leadSource").value;
-  const equipe = me.equipe || "equipe1";
-
-  const picked = await pickNextLeadForCorretor({
-    source, corretorUid: user.uid, equipeCorretor: equipe
-  });
-
-  if(!picked){
-    alert("Sem leads disponíveis nessa fonte.");
-    return;
-  }
-
-  leadAtualRef = picked.ref;
-  leadAtualData = picked.data;
-  detailsOpen = false;
-
-  // ✅ CORREÇÃO: agora renderiza o lead já buscando a mensagem atualizada do Firestore
-  await renderLeadInArea();
-};
-
-/** =========================
- *  ✅ CORREÇÃO PRINCIPAL AQUI:
- *  renderLeadInArea agora sempre busca mensagemPadrao atualizada no Firestore
- *  ========================= */
-async function renderLeadInArea(){
-  const lead = leadAtualData;
-  const area = $("leadArea");
-
-  // Busca atualizada do usuário
-  const user = auth.currentUser;
-  const snap = await db.collection("users").doc(user.uid).get();
-  const userAtual = snap.exists ? (snap.data() || {}) : {};
-
-  const telClean = cleanPhone(lead.telefone);
-  const msgBase  = userAtual.mensagemPadrao || "";
-  const msgFinal = encodeURIComponent(templateMessage(msgBase, lead));
-
-  area.innerHTML = `
-    <div><b>${lead.nome || "Sem nome"}</b></div>
-    <div class="small muted">${lead.telefone || ""} • ${lead.email || ""}</div>
-    <div class="divider"></div>
-
-    <div class="grid3">
-      <a href="tel:${telClean}">
-        <button class="btn btnBlue">📞 LIGAR</button>
-      </a>
-
-      <a href="sms:${telClean}?body=${msgFinal}">
-        <button class="btn btnBlue">📩 SMS</button>
-      </a>
-
-      <a href="mailto:${encodeURIComponent(lead.email || "")}?subject=${encodeURIComponent("PROEFI - ALVENA")}&body=${msgFinal}">
-        <button class="btn btnBlue">📧 EMAIL</button>
-      </a>
-    </div>
-
-    <a href="https://wa.me/55${telClean}?text=${msgFinal}" target="_blank">
-      <button class="btn btnBlue" style="margin-top:10px">💬 WHATSAPP</button>
-    </a>
-
-    <div class="divider"></div>
-
-    <div class="grid2">
-      <button class="btn btnGreen" onclick="uiAtendeu()">ATENDEU</button>
-      <button class="btn btnRed" onclick="uiNaoAtendeu()">NÃO ATENDEU</button>
-    </div>
-
-    <div id="atendeuBox"></div>
-  `;
-}
-
-window.uiNaoAtendeu = async function(){
-  if(!leadAtualRef) return;
-
-  await leadAtualRef.update({
-    status: "fila",
-    corretorId: (leadAtualData.origem === "geral") ? auth.currentUser.uid : null,
-    emAtendimentoEm: null,
-    timestampDistribuicao: null,
-    timestampFinalizacao: null,
-    atendeu: false,
-    resultado: null,
-    observacao: null,
-    dataAgendada: null,
-    atualizadoEm: nowMs()
-  });
-
-  leadAtualRef = null;
-  leadAtualData = null;
-  $("leadArea").innerHTML = `<div class="center muted">Lead devolvido para a fila.</div>`;
-};
-
-window.uiAtendeu = function(){
-  if(!leadAtualRef) return;
-  if(detailsOpen) return;
-  detailsOpen = true;
-
-  $("atendeuBox").innerHTML = `
-    <div class="divider"></div>
-    <div><b>Finalize o atendimento</b></div>
-    <div class="small muted">Escolha uma opção obrigatória abaixo:</div>
-
-    <div class="divider"></div>
-
-    <button class="btn btnGold" onclick="uiAgendamento()">📅 AGENDAMENTO</button>
-    <button class="btn btnGold" onclick="uiPromessa()">PROMESSA DE DOCUMENTAÇÃO</button>
-    <button class="btn btnGold" onclick="uiSemInteresse()">NÃO GEROU INTERESSE</button>
-
-    <div id="extraBox"></div>
-  `;
-};
-
-window.uiAgendamento = function(){
-  $("extraBox").innerHTML = `
-    <div class="divider"></div>
-    <div class="small muted">Data e horário obrigatórios:</div>
-    <div class="grid2">
-      <input type="date" id="agData" />
-      <input type="time" id="agHora" />
-    </div>
-    <div class="fieldLabel">Observações (opcional)</div>
-    <textarea id="obsAg" placeholder="Ex: cliente quer apartamento 2q..."></textarea>
-    <button class="btn btnGreen" onclick="confirmarAtendeu('AGENDAMENTO')">CONFIRMAR</button>
-  `;
-};
-
-window.uiPromessa = function(){
-  $("extraBox").innerHTML = `
-    <div class="divider"></div>
-    <div class="fieldLabel">Observações (opcional)</div>
-    <textarea id="obsPr" placeholder="Ex: vai enviar docs amanhã..."></textarea>
-    <button class="btn btnGreen" onclick="confirmarAtendeu('PROMESSA DOCUMENTAÇÃO')">CONFIRMAR</button>
-  `;
-};
-
-window.uiSemInteresse = function(){
-  $("extraBox").innerHTML = `
-    <div class="divider"></div>
-    <div class="fieldLabel">Feedback obrigatório</div>
-    <textarea id="fb" placeholder="Motivo / objeção / próximo passo..."></textarea>
-    <button class="btn btnGreen" onclick="confirmarAtendeu('NÃO GEROU INTERESSE')">CONFIRMAR</button>
-  `;
-};
-
-window.confirmarAtendeu = async function(resultado){
-  if(!leadAtualRef) return;
-
-  let dataAgendada = null;
-  let obs = null;
-
-  if(resultado === "AGENDAMENTO"){
-    const d = $("agData").value;
-    const h = $("agHora").value;
-    if(!d || !h) return alert("Preencha data e horário do agendamento.");
-    dataAgendada = `${d} ${h}`;
-    obs = ($("obsAg").value || "").trim();
-  }else if(resultado === "PROMESSA DOCUMENTAÇÃO"){
-    obs = ($("obsPr").value || "").trim();
-  }else{
-    const fb = ($("fb").value || "").trim();
-    if(!fb) return alert("Feedback é obrigatório.");
-    obs = fb;
-  }
-
-  await leadAtualRef.update({
-    status: "finalizado",
-    atendeu: true,
-    resultado,
-    observacao: obs || null,
-    dataAgendada: dataAgendada,
-    timestampFinalizacao: nowMs(),
-    atualizadoEm: nowMs()
-  });
-
-  leadAtualRef = null;
-  leadAtualData = null;
-  detailsOpen = false;
-  $("leadArea").innerHTML = `<div class="center ok">Atendimento finalizado!</div>`;
-};
-
-/** =========================
- *  Relatório Excel + Email
- *  ========================= */
-window.gerarRelatorioExcel = async function(){
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  if(!me || me.role !== "corretor") return;
-
-  const snap = await db.collection("leads").where("corretorId","==",user.uid).get();
-  if(snap.empty) return alert("Sem registros para relatório.");
-
-  const today = dayKey(nowMs());
-
-  let totalLigacoes = 0;
-  let totalNaoAtendeu = 0;
-  let totalAtendidos = 0;
-  let totalAgend = 0;
-  let totalPromessa = 0;
-  let totalSemInteresse = 0;
-
-  const atendidosRows = [];
-
-  snap.forEach(ds=>{
-    const d = ds.data();
-
-    if(d.timestampDistribuicao && dayKey(d.timestampDistribuicao) === today){
-      totalLigacoes += 1;
-    }
-    if(d.atendeu === false && d.timestampDistribuicao && dayKey(d.timestampDistribuicao) === today){
-      totalNaoAtendeu += 1;
-    }
-
-    if(d.atendeu === true && d.timestampFinalizacao && dayKey(d.timestampFinalizacao) === today){
-      totalAtendidos += 1;
-      if(d.resultado === "AGENDAMENTO") totalAgend += 1;
-      else if(d.resultado === "PROMESSA DOCUMENTAÇÃO") totalPromessa += 1;
-      else if(d.resultado === "NÃO GEROU INTERESSE") totalSemInteresse += 1;
-
-      const tempoMin = (d.timestampFinalizacao && d.timestampDistribuicao)
-        ? Math.max(0, Math.floor((d.timestampFinalizacao - d.timestampDistribuicao)/60000))
-        : "";
-
-      atendidosRows.push({
-        Cliente: d.nome || "",
-        Telefone: d.telefone || "",
-        Email: d.email || "",
-        Resultado: d.resultado || "",
-        "Data/Hora Agendada": d.dataAgendada || "",
-        Feedback: d.observacao || "",
-        "Tempo Atendimento (min)": tempoMin
-      });
-    }
-  });
-
-  const tempoLogadoMin = loginTimestamp ? Math.max(0, Math.floor((nowMs()-loginTimestamp)/60000)) : 0;
-
-  const resumo = [
-    ["Operador", user.email],
-    ["Equipe", me.equipe || ""],
-    ["Tempo total logado (min)", tempoLogadoMin],
-    ["Total de ligações (tentativas)", totalLigacoes],
-    ["Total NÃO atendeu", totalNaoAtendeu],
-    ["Total ATENDIDOS", totalAtendidos],
-    ["Agendamentos", totalAgend],
-    ["Promessa documentação", totalPromessa],
-    ["Não gerou interesse", totalSemInteresse],
-    ["Data", today]
-  ];
-
-  const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
-  const wsAtend  = XLSX.utils.json_to_sheet(atendidosRows);
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
-  XLSX.utils.book_append_sheet(wb, wsAtend, "Atendidos");
-
-  XLSX.writeFile(wb, `PROEFI_RELATORIO_${today}.xlsx`);
-  alert("Relatório Excel gerado (baixado no dispositivo).");
-};
-
-window.prepararEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  if(!me || me.role !== "corretor") return;
-
-  const equipe = me.equipe || "equipe1";
-  const gsnap = await db.collection("users")
-    .where("role","==","gerente")
-    .where("equipe","==",equipe)
-    .limit(1)
-    .get();
-
-  if(gsnap.empty){
-    alert("Nenhum gerente encontrado para sua equipe. Peça para o gerente salvar 'emailRelatorio'.");
-    return;
-  }
-  const gerente = gsnap.docs[0].data();
-  const to = gerente.emailRelatorio || gerente.email || "";
-  if(!to){
-    alert("Gerente sem emailRelatorio configurado.");
-    return;
-  }
-
-  const today = dayKey(nowMs());
-  const subject = encodeURIComponent(`PROEFI - ALVENA | Relatório do Operador | ${today}`);
-  const body = encodeURIComponent(
-`Olá, gerente.
-
-Segue o relatório do operador:
-Operador: ${user.email}
-Equipe: ${equipe}
-Data: ${today}
-
-(Anexo: arquivo Excel gerado no PROEFI)
-
-Att,
-PROEFI - ALVENA`
+async function doLogin(){
+ try{
+  await auth.signInWithEmailAndPassword(
+   $("email").value,
+   $("senha").value
   );
+ }catch(e){alert(e.message);}
+}
+window.doLogin=doLogin;
 
-  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
-};
+/* ================= MENU APP ================= */
+function renderApp(){
+ $("app").innerHTML=`
+ <div id="view"></div>
 
-/** =========================
- *  Bootstrap
- *  ========================= */
-auth.onAuthStateChanged(async (user)=>{
-  if(!user){
-    renderLogin();
-    return;
-  }
+ <div class="menu">
+   <button onclick="goTab('painel')">🏠</button>
+   <button onclick="goTab('atendimento')">☎️</button>
+   <button onclick="goTab('resultados')">📊</button>
+   <button onclick="goTab('config')">⚙️</button>
+ </div>
+ `;
+ goTab("painel");
+}
 
-  const userSnap = await db.collection("users").doc(user.uid).get();
-  if(!userSnap.exists){
-    renderUnauthorized();
-    return;
-  }
+function goTab(tab){
+ currentTab=tab;
+ if(tab==="painel") renderPainel();
+ if(tab==="atendimento") renderAtendimento();
+ if(tab==="resultados") renderResultados();
+ if(tab==="config") renderConfig();
+}
+window.goTab=goTab;
 
-  const data = userSnap.data();
-  if(data.role === "diretor"){
-    renderDiretor(user, data);
-  }else if(data.role === "gerente"){
-    renderGerente(user, data);
-  }else{
-    renderCorretor(user, data);
-  }
+/* ================= PAINEL ================= */
+async function renderPainel(){
+
+ const ativo=userData.ativo?"🟢 ATIVO":"🔴 PAUSADO";
+
+ $("view").innerHTML=`
+ <div class="card">
+   <h2>Painel</h2>
+   <div>${ativo}</div>
+   <div class="small">Tempo logado: <span id="tempoLogado"></span></div>
+   <button class="btn btnGreen" onclick="setAtivo(true)">ESTOU ATIVO</button>
+   <button class="btn btnRed" onclick="setAtivo(false)">PAUSAR</button>
+ </div>
+
+ <div class="card">
+   <h2>Mini CRM - Hoje</h2>
+   <div id="statsHoje">Carregando...</div>
+ </div>
+
+ <div class="card">
+   <button class="btn btnGold" onclick="goTab('atendimento')">
+   IR PARA ATENDIMENTO
+   </button>
+ </div>
+ `;
+
+ startTimer();
+ carregarStatsHoje();
+}
+
+function startTimer(){
+ setInterval(()=>{
+  const min=Math.floor((Date.now()-loginStart)/60000);
+  if($("tempoLogado")) $("tempoLogado").innerText=min+" min";
+ },1000);
+}
+
+async function setAtivo(v){
+ await db.collection("users").doc(auth.currentUser.uid)
+ .update({ativo:v});
+ userData.ativo=v;
+ renderPainel();
+}
+window.setAtivo=setAtivo;
+
+/* ================= STATS ================= */
+async function carregarStatsHoje(){
+ const key=new Date().toISOString().slice(0,10);
+ const doc=await db.collection("stats_diarios")
+ .doc(key+"_"+auth.currentUser.uid).get();
+
+ let d=doc.exists?doc.data():{};
+ $("statsHoje").innerHTML=`
+ 📞 Ligações: ${d.ligacoes||0}<br>
+ 🟢 Atendidos: ${d.atendidos||0}<br>
+ 📅 Agendamentos: ${d.agendamentos||0}<br>
+ 📂 Promessas: ${d.promessas||0}
+ `;
+}
+
+/* ================= ATENDIMENTO ================= */
+async function renderAtendimento(){
+
+ $("view").innerHTML=`
+ <div class="card">
+   <h2>Atendimento</h2>
+   <button class="btn btnGold" onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
+   <div id="leadBox" style="margin-top:10px"></div>
+ </div>
+ `;
+}
+
+async function pegarLead(){
+
+ const snap=await db.collection("leads")
+ .where("status","==","fila")
+ .limit(1).get();
+
+ if(snap.empty){
+  $("leadBox").innerHTML="Sem leads.";
+  return;
+ }
+
+ const doc=snap.docs[0];
+ leadAtual={id:doc.id,...doc.data()};
+
+ await doc.ref.update({
+  status:"em atendimento",
+  corretorId:auth.currentUser.uid,
+  timestampDistribuicao:now()
+ });
+
+ renderLead();
+}
+
+function renderLead(){
+
+ const msg=msgTemplate(userData.mensagemPadrao||"",leadAtual);
+ const tel=cleanPhone(leadAtual.telefone);
+
+ $("leadBox").innerHTML=`
+ <h3>${leadAtual.nome}</h3>
+ <div>${leadAtual.telefone}</div>
+ <div class="small">${leadAtual.email||""}</div>
+
+ <a href="tel:${tel}"><button class="btn btnBlue">📞 LIGAR</button></a>
+ <a href="https://wa.me/55${tel}?text=${encodeURIComponent(msg)}" target="_blank">
+   <button class="btn btnBlue">💬 WHATSAPP</button>
+ </a>
+
+ <button class="btn btnGreen" onclick="finalizar('AGENDAMENTO')">ATENDEU - AGENDAMENTO</button>
+ <button class="btn btnGold" onclick="finalizar('PROMESSA')">ATENDEU - PROMESSA</button>
+ <button class="btn btnRed" onclick="naoAtendeu()">NÃO ATENDEU</button>
+ `;
+}
+
+async function naoAtendeu(){
+ await db.collection("leads").doc(leadAtual.id).update({
+  status:"fila",
+  corretorId:null
+ });
+ leadAtual=null;
+ renderAtendimento();
+}
+window.naoAtendeu=naoAtendeu;
+
+async function finalizar(tipo){
+
+ const ref=db.collection("leads").doc(leadAtual.id);
+
+ await ref.update({
+  status:"finalizado",
+  resultado:tipo,
+  atendeu:true,
+  timestampFinalizacao:now()
+ });
+
+ await registrarEvento(tipo);
+
+ leadAtual=null;
+ renderAtendimento();
+}
+window.finalizar=finalizar;
+
+/* ================= EVENTS + STATS ================= */
+async function registrarEvento(tipo){
+
+ const uid=auth.currentUser.uid;
+ const hoje=new Date().toISOString().slice(0,10);
+ const statId=hoje+"_"+uid;
+
+ await db.collection("events").add({
+  tipo,
+  uid,
+  timestamp:now()
+ });
+
+ const ref=db.collection("stats_diarios").doc(statId);
+
+ await db.runTransaction(async t=>{
+  const doc=await t.get(ref);
+  let d=doc.exists?doc.data():{
+   ligacoes:0,atendidos:0,agendamentos:0,promessas:0
+  };
+
+  d.ligacoes++;
+  d.atendidos++;
+
+  if(tipo==="AGENDAMENTO") d.agendamentos++;
+  if(tipo==="PROMESSA") d.promessas++;
+
+  t.set(ref,d);
+ });
+}
+
+/* ================= RESULTADOS ================= */
+function renderResultados(){
+ $("view").innerHTML=`
+ <div class="card">
+   <h2>Resultados</h2>
+   <div>Mini CRM do dia já aparece no painel.</div>
+ </div>`;
+}
+
+/* ================= CONFIG ================= */
+function renderConfig(){
+ $("view").innerHTML=`
+ <div class="card">
+   <h2>Mensagem padrão</h2>
+   <textarea id="msg" style="width:100%;height:90px">${userData.mensagemPadrao||""}</textarea>
+   <button class="btn btnBlue" onclick="salvarMsg()">SALVAR</button>
+ </div>
+ `;
+}
+window.salvarMsg=async function(){
+ const msg=$("msg").value;
+ await db.collection("users").doc(auth.currentUser.uid)
+ .update({mensagemPadrao:msg});
+ userData.mensagemPadrao=msg;
+ alert("Mensagem salva");
+}
+
+/* ================= AUTH ================= */
+auth.onAuthStateChanged(async u=>{
+ if(!u){renderLogin();return;}
+
+ const doc=await db.collection("users").doc(u.uid).get();
+ if(!doc.exists){alert("Usuário não autorizado");auth.signOut();return;}
+
+ userData=doc.data();
+ renderApp();
 });
 </script>
 </body>
