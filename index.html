@@ -127,8 +127,8 @@
   }
 
   a{ text-decoration:none; }
-  .danger{color:#b00020; font-weight:700}
-  .ok{color:#0b6b2b; font-weight:700}
+  .danger{color:#b00020; font-weight:900}
+  .ok{color:#0b6b2b; font-weight:900}
 
   .bottomNav{
     position:fixed;
@@ -149,6 +149,13 @@
   }
   .bottomNav button.active{
     background: rgba(33,52,108,0.08);
+  }
+
+  .listItem{
+    border:1px solid rgba(33,52,108,0.15);
+    border-radius:12px;
+    padding:12px;
+    margin-top:10px;
   }
 </style>
 </head>
@@ -181,6 +188,7 @@ let loginTimestamp = null;
 let leadAtualRef   = null;
 let leadAtualData  = null;
 let detailsOpen    = false;
+let lastLeadId = null;
 
 let currentUser = null;
 let currentUserData = null;
@@ -188,11 +196,8 @@ let currentUserData = null;
 let currentTab = "painel";
 let toggleMode = null;
 
-// ✅ NOVO: evita pegar o mesmo lead em seguida
-let lastLeadId = null;
-
-// ✅ NOVO: cooldown (em ms) para não repetir o mesmo lead pro mesmo corretor
-const NAO_ATENDEU_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutos
+// evita repetir lead imediatamente
+const NAO_ATENDEU_COOLDOWN_MS = 10 * 60 * 1000; // 10 min
 
 /** =========================
  *  Helpers
@@ -229,12 +234,31 @@ function activeBadge(ativo){
   return `<span class="pill" style="background:rgba(255,204,203,0.6)">PAUSADO</span>`;
 }
 
+function renderHeader(userEmail, role, extraHtml=""){
+  return `
+    <div class="brand">
+      <h1>PROEFI - ALVENA</h1>
+      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div><b>${role.toUpperCase()}</b></div>
+          <div class="small muted">${userEmail}</div>
+        </div>
+        ${extraHtml}
+      </div>
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="auth.signOut()">SAIR</button>
+    </div>
+  `;
+}
+
 /** =========================
- *  Login UI
+ *  LOGIN + CRIAR ACESSO
  *  ========================= */
 function renderLogin(){
-  const el = $("app");
-  el.innerHTML = `
+  $("app").innerHTML = `
     <div class="brand">
       <h1>PROEFI - ALVENA</h1>
       <div class="sub">
@@ -252,17 +276,109 @@ function renderLogin(){
 
       <button class="btn btnGold" style="margin-top:14px" onclick="doLogin()">ENTRAR</button>
       <div class="divider"></div>
+
+      <button class="btn btnBlue" onclick="toggleCreateAccess()">CRIAR ACESSO</button>
+
+      <div id="createBox"></div>
+
+      <div class="divider"></div>
       <div class="small muted center">Acesso interno • PROEFI - ALVENA</div>
     </div>
   `;
 }
 
+window.toggleCreateAccess = function(){
+  const box = $("createBox");
+  if(!box) return;
+  if(box.innerHTML.trim()){
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="divider"></div>
+    <div><b>Criar acesso</b></div>
+    <div class="small muted">Após criar, ficará <b>pendente</b> até o gestor/diretor aprovar.</div>
+
+    <div class="fieldLabel">Seu nome</div>
+    <input id="cadNome" placeholder="Ex: João Silva" />
+
+    <div class="fieldLabel">Equipe (ex: equipe1)</div>
+    <input id="cadEquipe" placeholder="Ex: equipe1" />
+
+    <div class="fieldLabel">Solicitar como</div>
+    <select id="cadRole">
+      <option value="corretor">CORRETOR</option>
+      <option value="gerente">GERENTE</option>
+    </select>
+
+    <div class="divider"></div>
+    <button class="btn btnGreen" onclick="criarAcesso()">CRIAR E ENVIAR PARA APROVAÇÃO</button>
+  `;
+};
+
 window.doLogin = async function(){
-  const email = $("email").value.trim();
-  const senha = $("senha").value;
+  const email = ($("email")?.value || "").trim();
+  const senha = $("senha")?.value || "";
   try{
     await auth.signInWithEmailAndPassword(email, senha);
   }catch(e){
+    // mensagem mais clara
+    if(String(e.code||"").includes("invalid-login-credentials") || String(e.message||"").toLowerCase().includes("invalid")){
+      alert("Credenciais inválidas. Se for seu primeiro acesso, clique em CRIAR ACESSO.");
+      return;
+    }
+    alert(e.message);
+  }
+};
+
+window.criarAcesso = async function(){
+  const email = ($("email")?.value || "").trim();
+  const senha = $("senha")?.value || "";
+  const nome = ($("cadNome")?.value || "").trim();
+  const equipe = ($("cadEquipe")?.value || "").trim();
+  const roleReq = ($("cadRole")?.value || "corretor").trim();
+
+  if(!email || !senha) return alert("Preencha EMAIL e SENHA acima.");
+  if(senha.length < 6) return alert("A senha precisa ter pelo menos 6 caracteres.");
+  if(!nome) return alert("Digite seu nome.");
+  if(!equipe) return alert("Digite sua equipe (ex: equipe1).");
+
+  try{
+    const cred = await auth.createUserWithEmailAndPassword(email, senha);
+    const uid = cred.user.uid;
+
+    await db.collection("users").doc(uid).set({
+      nome,
+      email,
+      equipe,
+      role: "pendente",
+      solicitadoRole: roleReq,
+      aprovado: false,
+      solicitadoEm: nowMs(),
+      ativo: false,
+      mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse."
+    }, { merge:true });
+
+    $("app").innerHTML = `
+      <div class="brand">
+        <h1>PROEFI - ALVENA</h1>
+        <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
+      </div>
+      <div class="card">
+        <div class="ok">✅ Acesso criado!</div>
+        <div class="divider"></div>
+        <div><b>Aguardando validação do gestor ou diretor.</b></div>
+        <div class="small muted">Você poderá acessar assim que for aprovado.</div>
+        <div class="divider"></div>
+        <button class="btn btnGold" onclick="auth.signOut()">SAIR</button>
+      </div>
+    `;
+  }catch(e){
+    if(String(e.code||"").includes("email-already-in-use")){
+      alert("Este email já existe. Se você já tem cadastro, use ENTRAR. Se estiver pendente, aguarde aprovação.");
+      return;
+    }
     alert(e.message);
   }
 };
@@ -277,6 +393,21 @@ function renderUnauthorized(){
       <div class="danger">Usuário não autorizado (cadastro não encontrado em users).</div>
       <div class="divider"></div>
       <button class="btn btnGold" onclick="auth.signOut()">Sair</button>
+    </div>
+  `;
+}
+
+function renderPending(user, data){
+  $("app").innerHTML = `
+    ${renderHeader(user.email, "pendente")}
+    <div class="card">
+      <div class="ok">✅ Seu acesso foi criado.</div>
+      <div class="divider"></div>
+      <div><b>Status:</b> aguardando validação do gestor ou diretor.</div>
+      <div class="small muted">Equipe: ${data?.equipe || "-"}</div>
+      <div class="small muted">Solicitado como: ${(data?.solicitadoRole || "-").toUpperCase()}</div>
+      <div class="divider"></div>
+      <div class="small muted">Assim que aprovarem, você poderá usar o PROEFI normalmente.</div>
     </div>
   `;
 }
@@ -336,11 +467,8 @@ function makeLeadDoc(base){
     observacao: null,
     dataAgendada: null,
     totalTentativas: 0,
-
-    // ✅ NOVO: marcação do último "não atendeu" por corretor (para cooldown)
     ultimoNaoAtendeuPor: null,
     ultimoNaoAtendeuEm: null,
-
     origem: null,
     equipe: null,
     donoUpload: null,
@@ -421,8 +549,7 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
 }
 
 /** =========================
- *  Lead selection per source (REAL)
- *  ✅ NOVO: busca lote e escolhe um que não seja o último + respeita cooldown
+ *  Lead selection per source
  *  ========================= */
 async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
   let q = db.collection("leads").where("status","==","fila");
@@ -435,17 +562,12 @@ async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
     q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
   }
 
-  // ✅ pega um lote para selecionar e evitar repetição
   const snap = await q.limit(12).get();
   if(snap.empty) return null;
 
   const now = nowMs();
-
-  // filtra: não pega o mesmo lead que acabou de aparecer
-  // e não pega lead que o mesmo corretor marcou NÃO ATENDEU nos últimos X minutos
   const candidates = snap.docs.filter(doc => {
     if(doc.id === lastLeadId) return false;
-
     const d = doc.data() || {};
     if(d.ultimoNaoAtendeuPor === corretorUid && d.ultimoNaoAtendeuEm && (now - d.ultimoNaoAtendeuEm) < NAO_ATENDEU_COOLDOWN_MS){
       return false;
@@ -453,7 +575,6 @@ async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
     return true;
   });
 
-  // se não sobrar nenhum candidato (só tinha ele mesmo), usa o primeiro mesmo
   const chosenSnap = (candidates.length > 0)
     ? candidates[Math.floor(Math.random() * candidates.length)]
     : snap.docs[0];
@@ -470,12 +591,12 @@ async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
   });
 
   const fresh = await ref.get();
-  lastLeadId = fresh.id; // ✅ guarda o último lead entregue
+  lastLeadId = fresh.id;
   return { ref, data: fresh.data() };
 }
 
 /** =========================
- *  Stats + Ranking (mantidos)
+ *  Stats / Ranking
  *  ========================= */
 async function bumpStats({ uid, equipe, email, tipo }){
   const dk = dayKey(nowMs());
@@ -526,7 +647,7 @@ async function loadMyStats(){
   return snap.exists ? snap.data() : null;
 }
 
-async function computeRankingEquipe(){
+async function computeRankingEquipeForCorretor(){
   const dk = dayKey(nowMs());
   const equipe = currentUserData?.equipe || null;
   if(!equipe) return { pos: "-", total: "-" };
@@ -545,54 +666,84 @@ async function computeRankingEquipe(){
   return { pos: idx>=0 ? (idx+1) : "-", total: list.length };
 }
 
-/** =========================
- *  UI - Header
- *  ========================= */
-function renderHeader(userEmail, role, extraHtml=""){
-  return `
-    <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliárias</div>
-    </div>
-    <div class="card">
-      <div class="row">
-        <div class="grow">
-          <div><b>${role.toUpperCase()}</b></div>
-          <div class="small muted">${userEmail}</div>
-        </div>
-        ${extraHtml}
-      </div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="auth.signOut()">SAIR</button>
-    </div>
-  `;
+async function getEquipeStatsHoje(equipe){
+  const dk = dayKey(nowMs());
+  const snap = await db.collection("stats_diarios")
+    .where("dateKey","==",dk)
+    .where("equipe","==",equipe)
+    .get();
+
+  const list = snap.docs.map(d=>d.data());
+  // total equipe
+  const total = list.reduce((acc, x)=>{
+    acc.ligacoes += (x.ligacoes||0);
+    acc.naoAtendeu += (x.naoAtendeu||0);
+    acc.atendidos += (x.atendidos||0);
+    acc.agendamentos += (x.agendamentos||0);
+    acc.promessas += (x.promessas||0);
+    acc.semInteresse += (x.semInteresse||0);
+    return acc;
+  }, { ligacoes:0, naoAtendeu:0, atendidos:0, agendamentos:0, promessas:0, semInteresse:0 });
+
+  // ranking corretor
+  list.sort((a,b)=> (b.atendidos||0) - (a.atendidos||0));
+  return { list, total };
+}
+
+async function getGeralHoje(){
+  const dk = dayKey(nowMs());
+  const snap = await db.collection("stats_diarios")
+    .where("dateKey","==",dk)
+    .get();
+
+  const list = snap.docs.map(d=>d.data());
+  const total = list.reduce((acc, x)=>{
+    acc.ligacoes += (x.ligacoes||0);
+    acc.naoAtendeu += (x.naoAtendeu||0);
+    acc.atendidos += (x.atendidos||0);
+    acc.agendamentos += (x.agendamentos||0);
+    acc.promessas += (x.promessas||0);
+    acc.semInteresse += (x.semInteresse||0);
+    return acc;
+  }, { ligacoes:0, naoAtendeu:0, atendidos:0, agendamentos:0, promessas:0, semInteresse:0 });
+
+  return { list, total };
 }
 
 /** =========================
- *  Bottom nav (corretor)
+ *  Approvals (gerente/diretor)
  *  ========================= */
-function renderBottomNav(){
-  return `
-    <div class="bottomNav">
-      <button class="${currentTab==='painel'?'active':''}" onclick="goTab('painel')">🏠 Painel</button>
-      <button class="${currentTab==='atendimento'?'active':''}" onclick="goTab('atendimento')">☎️ Atendimento</button>
-      <button class="${currentTab==='resultados'?'active':''}" onclick="goTab('resultados')">📊 Resultados</button>
-      <button class="${currentTab==='config'?'active':''}" onclick="goTab('config')">⚙️ Config</button>
-    </div>
-  `;
+async function fetchPendentes({ scopeEquipe=null }){
+  let q = db.collection("users").where("aprovado","==",false).where("role","==","pendente");
+  if(scopeEquipe) q = q.where("equipe","==",scopeEquipe);
+  const snap = await q.limit(50).get();
+  return snap.docs.map(d=>({ id:d.id, ...d.data() }));
 }
 
-window.goTab = function(tab){
-  currentTab = tab;
-  renderCorretorShell(currentUser, currentUserData);
-};
+async function aprovarUsuario({ uid, roleFinal, equipeFinal }){
+  await db.collection("users").doc(uid).update({
+    role: roleFinal,
+    equipe: equipeFinal || null,
+    aprovado: true,
+    aprovadoEm: nowMs(),
+    aprovadoPor: currentUser.uid
+  });
+}
+
+async function rejeitarUsuario({ uid }){
+  await db.collection("users").doc(uid).update({
+    role: "rejeitado",
+    aprovado: false,
+    rejeitadoEm: nowMs(),
+    rejeitadoPor: currentUser.uid
+  });
+}
 
 /** =========================
- *  Director / Manager screens
+ *  DIRETOR
  *  ========================= */
-function renderDiretor(user, userData){
-  const el = $("app");
-  el.innerHTML = `
+function renderDiretor(user, data){
+  $("app").innerHTML = `
     ${renderHeader(user.email, "diretor")}
     <div class="card">
       <div><b>Upload • Lista Geral</b></div>
@@ -602,13 +753,118 @@ function renderDiretor(user, userData){
       <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
       <div class="small muted">Distribui ALEATORIAMENTE no upload para corretores <b>ATIVOS</b>.</div>
     </div>
+
+    <div class="card">
+      <div><b>Ranking • Gerentes (Hoje)</b></div>
+      <div class="small muted">Soma dos resultados por equipe.</div>
+      <div class="divider"></div>
+      <div id="rankingGerentes" class="small muted">Carregando...</div>
+      <div class="divider"></div>
+      <div id="totaisGeral" class="small muted">Carregando...</div>
+    </div>
+
+    <div class="card">
+      <div><b>Aprovações pendentes</b></div>
+      <div class="small muted">Diretor pode aprovar qualquer equipe.</div>
+      <div class="divider"></div>
+      <div id="pendentesDiretor" class="small muted">Carregando...</div>
+    </div>
   `;
+
+  hydrateDiretor();
 }
 
-function renderGerente(user, userData){
-  const equipe = userData?.equipe || "equipe1";
-  const el = $("app");
-  el.innerHTML = `
+async function hydrateDiretor(){
+  // totais geral
+  const geral = await getGeralHoje();
+  $("totaisGeral").innerHTML = `
+    <div><b>Total geral hoje</b></div>
+    <div>📞 Ligações: <b>${geral.total.ligacoes}</b></div>
+    <div>🔴 Não atendeu: <b>${geral.total.naoAtendeu}</b></div>
+    <div>🟢 Atendidos: <b>${geral.total.atendidos}</b></div>
+    <div>📅 Agendamentos: <b>${geral.total.agendamentos}</b></div>
+    <div>📂 Promessas: <b>${geral.total.promessas}</b></div>
+    <div>❌ Sem interesse: <b>${geral.total.semInteresse}</b></div>
+  `;
+
+  // ranking gerentes (por equipe)
+  const gerSnap = await db.collection("users").where("role","==","gerente").get();
+  const gerentes = gerSnap.docs.map(d=>({ uid:d.id, ...d.data() }));
+
+  const rows = [];
+  for(const g of gerentes){
+    const equipe = g.equipe || null;
+    if(!equipe) continue;
+    const eq = await getEquipeStatsHoje(equipe);
+    rows.push({
+      gerente: g.nome || g.email || g.uid,
+      equipe,
+      atendidos: eq.total.atendidos,
+      ligacoes: eq.total.ligacoes,
+      agendamentos: eq.total.agendamentos,
+      promessas: eq.total.promessas
+    });
+  }
+
+  rows.sort((a,b)=> (b.atendidos||0) - (a.atendidos||0));
+
+  if(rows.length === 0){
+    $("rankingGerentes").innerHTML = `<div class="muted">Sem dados ainda hoje.</div>`;
+  }else{
+    $("rankingGerentes").innerHTML = rows.map((r,i)=>`
+      <div class="listItem">
+        <div><b>${i+1}º</b> • ${r.gerente} <span class="pill">Equipe: ${r.equipe}</span></div>
+        <div class="small muted">🟢 Atendidos: <b>${r.atendidos}</b> • 📞 Ligações: <b>${r.ligacoes}</b></div>
+        <div class="small muted">📅 Agend: <b>${r.agendamentos}</b> • 📂 Promessas: <b>${r.promessas}</b></div>
+      </div>
+    `).join("");
+  }
+
+  // pendentes
+  const pend = await fetchPendentes({ scopeEquipe:null });
+  if(pend.length === 0){
+    $("pendentesDiretor").innerHTML = `<div class="muted">Nenhum pendente.</div>`;
+  }else{
+    $("pendentesDiretor").innerHTML = pend.map(p=>`
+      <div class="listItem">
+        <div><b>${p.nome || p.email}</b></div>
+        <div class="small muted">${p.email || ""}</div>
+        <div class="small muted">Equipe: <b>${p.equipe || "-"}</b> • Solicitado: <b>${(p.solicitadoRole||"corretor").toUpperCase()}</b></div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <button class="btn btnGreen" onclick="aprovarPendenteDiretor('${p.id}')">APROVAR</button>
+          <button class="btn btnRed" onclick="rejeitarPendente('${p.id}')">REJEITAR</button>
+        </div>
+      </div>
+    `).join("");
+  }
+}
+
+window.aprovarPendenteDiretor = async function(uid){
+  const u = await db.collection("users").doc(uid).get();
+  if(!u.exists) return alert("Usuário não encontrado.");
+  const data = u.data() || {};
+  const roleFinal = data.solicitadoRole || "corretor";
+  const equipeFinal = data.equipe || null;
+  await aprovarUsuario({ uid, roleFinal, equipeFinal });
+  alert("Aprovado!");
+  hydrateDiretor();
+};
+
+window.rejeitarPendente = async function(uid){
+  await rejeitarUsuario({ uid });
+  alert("Rejeitado!");
+  if(currentUserData?.role === "diretor") hydrateDiretor();
+  if(currentUserData?.role === "gerente") hydrateGerente();
+};
+
+/** =========================
+ *  GERENTE
+ *  ========================= */
+function renderGerente(user, data){
+  const equipe = data?.equipe || "equipe1";
+
+  $("app").innerHTML = `
     ${renderHeader(user.email, "gerente", `<div class="pill">Equipe: ${equipe}</div>`)}
     <div class="card">
       <div><b>Upload • Lista do Gerente</b></div>
@@ -620,38 +876,134 @@ function renderGerente(user, userData){
     </div>
 
     <div class="card">
-      <div><b>Gerente • Email para relatórios</b></div>
+      <div><b>Ranking • Corretores da equipe (Hoje)</b></div>
+      <div class="small muted">Foco em resultados do dia.</div>
+      <div class="divider"></div>
+      <div id="rankingCorretoresEquipe" class="small muted">Carregando...</div>
+      <div class="divider"></div>
+      <div id="totaisEquipe" class="small muted">Carregando...</div>
+    </div>
+
+    <div class="card">
+      <div><b>Aprovações pendentes</b></div>
+      <div class="small muted">O gerente aprova apenas pendentes da <b>sua equipe</b>.</div>
+      <div class="divider"></div>
+      <div id="pendentesGerente" class="small muted">Carregando...</div>
+    </div>
+
+    <div class="card">
+      <div><b>Email para relatórios</b></div>
       <div class="small muted">Usado para o corretor enviar o relatório (email pronto).</div>
       <div class="divider"></div>
-      <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${userData?.emailRelatorio || ""}" />
+      <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${data?.emailRelatorio || ""}" />
       <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
     </div>
   `;
+
+  hydrateGerente();
 }
 
+async function hydrateGerente(){
+  const equipe = currentUserData?.equipe || "equipe1";
+  const eq = await getEquipeStatsHoje(equipe);
+
+  // ranking corretores
+  if(eq.list.length === 0){
+    $("rankingCorretoresEquipe").innerHTML = `<div class="muted">Sem dados ainda hoje.</div>`;
+  }else{
+    $("rankingCorretoresEquipe").innerHTML = eq.list.map((r,i)=>`
+      <div class="listItem">
+        <div><b>${i+1}º</b> • ${r.email || r.uid}</div>
+        <div class="small muted">🟢 Atendidos: <b>${r.atendidos||0}</b> • 📞 Ligações: <b>${r.ligacoes||0}</b> • 🔴 Não atendeu: <b>${r.naoAtendeu||0}</b></div>
+        <div class="small muted">📅 Agend: <b>${r.agendamentos||0}</b> • 📂 Promessas: <b>${r.promessas||0}</b> • ❌ Sem interesse: <b>${r.semInteresse||0}</b></div>
+      </div>
+    `).join("");
+  }
+
+  // totais equipe
+  $("totaisEquipe").innerHTML = `
+    <div><b>Total da equipe hoje</b></div>
+    <div>📞 Ligações: <b>${eq.total.ligacoes}</b></div>
+    <div>🔴 Não atendeu: <b>${eq.total.naoAtendeu}</b></div>
+    <div>🟢 Atendidos: <b>${eq.total.atendidos}</b></div>
+    <div>📅 Agendamentos: <b>${eq.total.agendamentos}</b></div>
+    <div>📂 Promessas: <b>${eq.total.promessas}</b></div>
+    <div>❌ Sem interesse: <b>${eq.total.semInteresse}</b></div>
+  `;
+
+  // pendentes da equipe
+  const pend = await fetchPendentes({ scopeEquipe:equipe });
+  if(pend.length === 0){
+    $("pendentesGerente").innerHTML = `<div class="muted">Nenhum pendente na sua equipe.</div>`;
+  }else{
+    $("pendentesGerente").innerHTML = pend.map(p=>`
+      <div class="listItem">
+        <div><b>${p.nome || p.email}</b></div>
+        <div class="small muted">${p.email || ""}</div>
+        <div class="small muted">Solicitado: <b>${(p.solicitadoRole||"corretor").toUpperCase()}</b></div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <button class="btn btnGreen" onclick="aprovarPendenteGerente('${p.id}')">APROVAR</button>
+          <button class="btn btnRed" onclick="rejeitarPendente('${p.id}')">REJEITAR</button>
+        </div>
+      </div>
+    `).join("");
+  }
+}
+
+window.aprovarPendenteGerente = async function(uid){
+  const equipe = currentUserData?.equipe || null;
+  const u = await db.collection("users").doc(uid).get();
+  if(!u.exists) return alert("Usuário não encontrado.");
+  const data = u.data() || {};
+  // gerente só aprova corretor (regra simples)
+  const roleFinal = "corretor";
+  const equipeFinal = equipe || data.equipe || null;
+  await aprovarUsuario({ uid, roleFinal, equipeFinal });
+  alert("Aprovado como CORRETOR!");
+  hydrateGerente();
+};
+
+window.salvarEmailRelatorio = async function(){
+  const email = ($("emailRelatorio")?.value || "").trim();
+  if(!email) return alert("Digite o email do gerente para relatórios.");
+  await db.collection("users").doc(currentUser.uid).update({ emailRelatorio: email });
+  currentUserData = await getUserDoc(currentUser.uid);
+  alert("Email de relatórios salvo!");
+};
+
 /** =========================
- *  Corretor Shell (com abas)
+ *  CORRETOR (mantido como estava funcionando)
  *  ========================= */
+function renderBottomNav(){
+  return `
+    <div class="bottomNav">
+      <button class="${currentTab==='painel'?'active':''}" onclick="goTab('painel')">🏠 Painel</button>
+      <button class="${currentTab==='atendimento'?'active':''}" onclick="goTab('atendimento')">☎️ Atendimento</button>
+      <button class="${currentTab==='resultados'?'active':''}" onclick="goTab('resultados')">📊 Resultados</button>
+      <button class="${currentTab==='config'?'active':''}" onclick="goTab('config')">⚙️ Config</button>
+    </div>
+  `;
+}
+window.goTab = function(tab){
+  currentTab = tab;
+  renderCorretorShell(currentUser, currentUserData);
+};
+
 function renderCorretorShell(user, userData){
   const equipe = userData?.equipe || "equipe1";
   const ativo  = !!userData?.ativo;
 
-  let body = `
-    ${renderHeader(user.email, "corretor", `<div>${activeBadge(ativo)}</div>`)}
-  `;
+  let body = `${renderHeader(user.email, "corretor", `<div>${activeBadge(ativo)}</div>`)}`;
 
   if(currentTab === "painel"){
     body += `
       <div class="card">
-        <div class="row">
-          <div class="grow">
-            <div><b>Status de atendimento</b></div>
-            <div class="small muted">Somente corretores ATIVOS entram na distribuição geral.</div>
-            <div class="divider"></div>
-            <div class="small">⏱ Tempo logado: <b><span id="tempoLogado">0</span> min</b></div>
-            <div class="small">🏆 Ranking hoje (equipe): <b><span id="rankHoje">--</span></b></div>
-          </div>
-        </div>
+        <div><b>Status de atendimento</b></div>
+        <div class="small muted">Somente corretores ATIVOS entram na distribuição geral.</div>
+        <div class="divider"></div>
+        <div class="small">⏱ Tempo logado: <b><span id="tempoLogado">0</span> min</b></div>
+        <div class="small">🏆 Ranking hoje (equipe): <b><span id="rankHoje">--</span></b></div>
         <div class="divider"></div>
         <div class="grid2">
           <button class="btn btnGreen" onclick="setMeActive(true)">🟢 ESTOU ATIVO</button>
@@ -663,7 +1015,6 @@ function renderCorretorShell(user, userData){
 
       <div class="card">
         <div><b>Resumo do Dia</b></div>
-        <div class="small muted">Atualiza automaticamente conforme você trabalha.</div>
         <div class="divider"></div>
         <div id="statsBox" class="small muted">Carregando...</div>
       </div>
@@ -682,9 +1033,6 @@ function renderCorretorShell(user, userData){
           <option value="minha">Minha Lista (Corretor)</option>
         </select>
         <button class="btn btnGold" onclick="pegarProximoLead()">PEGAR PRÓXIMO LEAD</button>
-        <div class="small muted" style="margin-top:8px">
-          Dica: finalize o lead atual antes de pegar outro.
-        </div>
       </div>
 
       <div class="card" id="leadArea">
@@ -717,7 +1065,7 @@ function renderCorretorShell(user, userData){
         <div><b>Mensagem Padrão (WhatsApp/SMS/Email)</b></div>
         <div class="small muted">Use: {{nome}} {{telefone}} {{email}}</div>
         <div class="divider"></div>
-        <textarea id="msgPadrao" placeholder="Digite sua mensagem padrão...">${userData?.mensagemPadrao || "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse."}</textarea>
+        <textarea id="msgPadrao" placeholder="Digite sua mensagem padrão...">${userData?.mensagemPadrao || ""}</textarea>
         <button class="btn btnBlue" onclick="salvarMensagemPadrao()">SALVAR MENSAGEM</button>
       </div>
 
@@ -732,27 +1080,32 @@ function renderCorretorShell(user, userData){
   }
 
   $("app").innerHTML = body + renderBottomNav();
-
-  if(currentTab === "painel" || currentTab === "resultados"){
-    hydrateStatsAndRank();
-  }
+  hydrateStatsAndRank();
 }
 
-/** =========================
- *  Actions
- *  ========================= */
+window.setMeActive = async function(ativo){
+  await setActiveStatus(currentUser.uid, ativo);
+  currentUserData = await getUserDoc(currentUser.uid);
+  renderCorretorShell(currentUser, currentUserData);
+};
+
+window.salvarMensagemPadrao = async function(){
+  const msg = $("msgPadrao")?.value || "";
+  await db.collection("users").doc(currentUser.uid).update({ mensagemPadrao: msg });
+  currentUserData = await getUserDoc(currentUser.uid);
+  alert("Mensagem padrão salva!");
+};
+
 window.uploadListaGeral = async function(){
   const file = $("fileDiretor")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
   try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "diretor") return alert("Apenas DIRETOR pode subir lista geral.");
     const r = await uploadLeadsFromFile({
-      file, origem:"geral", equipe:null, donoUploadUid:user.uid, distribuirGeralAgora:true
+      file, origem:"geral", equipe:null, donoUploadUid:currentUser.uid, distribuirGeralAgora:true
     });
     alert(`Lista geral enviada! Total: ${r.total}. Distribuída para corretores ativos.`);
     $("fileDiretor").value = "";
+    hydrateDiretor();
   }catch(e){
     alert(e.message);
   }
@@ -762,15 +1115,13 @@ window.uploadListaGerente = async function(){
   const file = $("fileGerente")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
   try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "gerente") return alert("Apenas GERENTE pode subir esta lista.");
-    const equipe = me.equipe || "equipe1";
+    const equipe = currentUserData?.equipe || "equipe1";
     const r = await uploadLeadsFromFile({
-      file, origem:"gerente", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false
+      file, origem:"gerente", equipe, donoUploadUid:currentUser.uid, distribuirGeralAgora:false
     });
     alert(`Lista da equipe enviada! Total: ${r.total}.`);
     $("fileGerente").value = "";
+    hydrateGerente();
   }catch(e){
     alert(e.message);
   }
@@ -780,12 +1131,9 @@ window.uploadListaCorretor = async function(){
   const file = $("fileCorretor")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
   try{
-    const user = auth.currentUser;
-    const me = await getUserDoc(user.uid);
-    if(!me || me.role !== "corretor") return alert("Apenas CORRETOR pode subir lista própria.");
-    const equipe = me.equipe || "equipe1";
+    const equipe = currentUserData?.equipe || "equipe1";
     const r = await uploadLeadsFromFile({
-      file, origem:"corretor", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false
+      file, origem:"corretor", equipe, donoUploadUid:currentUser.uid, distribuirGeralAgora:false
     });
     alert(`Sua lista foi enviada! Total: ${r.total}.`);
     $("fileCorretor").value = "";
@@ -794,42 +1142,14 @@ window.uploadListaCorretor = async function(){
   }
 };
 
-window.salvarEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const email = ($("emailRelatorio").value || "").trim();
-  if(!email) return alert("Digite o email do gerente para relatórios.");
-  await db.collection("users").doc(user.uid).update({ emailRelatorio: email });
-  alert("Email de relatórios salvo!");
-};
-
-window.setMeActive = async function(ativo){
-  const user = auth.currentUser;
-  await setActiveStatus(user.uid, ativo);
-  currentUserData = await getUserDoc(user.uid);
-  renderCorretorShell(user, currentUserData);
-};
-
-window.salvarMensagemPadrao = async function(){
-  const user = auth.currentUser;
-  const msg = $("msgPadrao").value || "";
-  await db.collection("users").doc(user.uid).update({ mensagemPadrao: msg });
-  currentUserData = await getUserDoc(user.uid);
-  alert("Mensagem padrão salva!");
-};
-
-/** =========================
- *  Lead Flow
- *  ========================= */
 window.pegarProximoLead = async function(){
   if(leadAtualRef) return alert("Você já está com um lead em atendimento. Finalize antes de pegar outro.");
 
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
   const source = $("leadSource") ? $("leadSource").value : "geral";
-  const equipe = me.equipe || "equipe1";
+  const equipe = currentUserData?.equipe || "equipe1";
 
   const picked = await pickNextLeadForCorretor({
-    source, corretorUid: user.uid, equipeCorretor: equipe
+    source, corretorUid: currentUser.uid, equipeCorretor: equipe
   });
 
   if(!picked){
@@ -842,7 +1162,7 @@ window.pegarProximoLead = async function(){
   detailsOpen = false;
   toggleMode = null;
 
-  await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"LIGACAO" });
+  await bumpStats({ uid:currentUser.uid, equipe, email:currentUser.email, tipo:"LIGACAO" });
   await renderLeadInArea();
 };
 
@@ -888,14 +1208,11 @@ async function renderLeadInArea(){
 window.uiNaoAtendeu = async function(){
   if(!leadAtualRef) return;
 
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  const equipe = me.equipe || "equipe1";
+  const equipe = currentUserData?.equipe || "equipe1";
 
-  // ✅ marca cooldown pro mesmo corretor não pegar esse lead de novo imediatamente
   await leadAtualRef.update({
     status: "fila",
-    corretorId: (leadAtualData.origem === "geral") ? user.uid : null,
+    corretorId: (leadAtualData.origem === "geral") ? currentUser.uid : null,
     emAtendimentoEm: null,
     timestampDistribuicao: null,
     timestampFinalizacao: null,
@@ -904,15 +1221,13 @@ window.uiNaoAtendeu = async function(){
     observacao: null,
     dataAgendada: null,
     atualizadoEm: nowMs(),
-
-    ultimoNaoAtendeuPor: user.uid,
+    ultimoNaoAtendeuPor: currentUser.uid,
     ultimoNaoAtendeuEm: nowMs()
   });
 
-  await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"NAO_ATENDEU" });
+  await bumpStats({ uid:currentUser.uid, equipe, email:currentUser.email, tipo:"NAO_ATENDEU" });
 
-  // limpa estado atual
-  lastLeadId = leadAtualRef.id; // garante que ele não seja re-entregue logo de cara
+  lastLeadId = leadAtualRef.id;
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
@@ -921,11 +1236,8 @@ window.uiNaoAtendeu = async function(){
   $("leadArea").innerHTML = `<div class="center muted">Lead devolvido para a fila. Pegando outro...</div>`;
   hydrateStatsAndRank();
 
-  // ✅ puxa outro automaticamente (sem repetir)
   setTimeout(()=>{
-    if(currentTab === "atendimento"){
-      window.pegarProximoLead();
-    }
+    window.pegarProximoLead();
   }, 350);
 };
 
@@ -1018,9 +1330,7 @@ window.cancelarExtra = function(){
 window.confirmarAtendeu = async function(resultado){
   if(!leadAtualRef) return;
 
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  const equipe = me.equipe || "equipe1";
+  const equipe = currentUserData?.equipe || "equipe1";
 
   let dataAgendada = null;
   let obs = null;
@@ -1050,11 +1360,11 @@ window.confirmarAtendeu = async function(resultado){
   });
 
   if(resultado === "AGENDAMENTO"){
-    await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"AGENDAMENTO" });
+    await bumpStats({ uid:currentUser.uid, equipe, email:currentUser.email, tipo:"AGENDAMENTO" });
   }else if(resultado === "PROMESSA DOCUMENTAÇÃO"){
-    await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"PROMESSA" });
+    await bumpStats({ uid:currentUser.uid, equipe, email:currentUser.email, tipo:"PROMESSA" });
   }else{
-    await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"SEM_INTERESSE" });
+    await bumpStats({ uid:currentUser.uid, equipe, email:currentUser.email, tipo:"SEM_INTERESSE" });
   }
 
   leadAtualRef = null;
@@ -1067,14 +1377,10 @@ window.confirmarAtendeu = async function(resultado){
 };
 
 /** =========================
- *  Relatório Excel + Email (mantidos)
+ *  Relatório Excel + Email (mantido)
  *  ========================= */
 window.gerarRelatorioExcel = async function(){
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  if(!me || me.role !== "corretor") return;
-
-  const snap = await db.collection("leads").where("corretorId","==",user.uid).get();
+  const snap = await db.collection("leads").where("corretorId","==",currentUser.uid).get();
   if(snap.empty) return alert("Sem registros para relatório.");
 
   const today = dayKey(nowMs());
@@ -1123,8 +1429,8 @@ window.gerarRelatorioExcel = async function(){
   const tempoLogadoMin = loginTimestamp ? Math.max(0, Math.floor((nowMs()-loginTimestamp)/60000)) : 0;
 
   const resumo = [
-    ["Operador", user.email],
-    ["Equipe", me.equipe || ""],
+    ["Operador", currentUser.email],
+    ["Equipe", currentUserData?.equipe || ""],
     ["Tempo total logado (min)", tempoLogadoMin],
     ["Total de ligações (tentativas)", totalLigacoes],
     ["Total NÃO atendeu", totalNaoAtendeu],
@@ -1147,11 +1453,7 @@ window.gerarRelatorioExcel = async function(){
 };
 
 window.prepararEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const me = await getUserDoc(user.uid);
-  if(!me || me.role !== "corretor") return;
-
-  const equipe = me.equipe || "equipe1";
+  const equipe = currentUserData?.equipe || "equipe1";
   const gsnap = await db.collection("users")
     .where("role","==","gerente")
     .where("equipe","==",equipe)
@@ -1175,7 +1477,7 @@ window.prepararEmailRelatorio = async function(){
 `Olá, gerente.
 
 Segue o relatório do operador:
-Operador: ${user.email}
+Operador: ${currentUser.email}
 Equipe: ${equipe}
 Data: ${today}
 
@@ -1189,9 +1491,11 @@ PROEFI - ALVENA`
 };
 
 /** =========================
- *  Hydration: contador + stats + ranking
+ *  Stats hydration
  *  ========================= */
 async function hydrateStatsAndRank(){
+  if(!currentUser || !currentUserData) return;
+
   if(loginTimestamp && $("tempoLogado")){
     const min = Math.max(0, Math.floor((nowMs() - loginTimestamp)/60000));
     $("tempoLogado").innerText = String(min);
@@ -1211,7 +1515,7 @@ async function hydrateStatsAndRank(){
   if($("statsBox2")) $("statsBox2").innerHTML = htmlStats;
 
   if($("rankHoje")){
-    const r = await computeRankingEquipe();
+    const r = await computeRankingEquipeForCorretor();
     $("rankHoje").innerText = (r.pos === "-" ? "--" : `${r.pos}º de ${r.total}`);
   }
 }
@@ -1243,6 +1547,12 @@ auth.onAuthStateChanged(async (user)=>{
   currentUser = user;
   currentUserData = userSnap.data();
 
+  // pendente
+  if(currentUserData.role === "pendente" || currentUserData.aprovado !== true){
+    renderPending(user, currentUserData);
+    return;
+  }
+
   if(currentUserData.role === "diretor"){
     renderDiretor(user, currentUserData);
     return;
@@ -1252,6 +1562,7 @@ auth.onAuthStateChanged(async (user)=>{
     return;
   }
 
+  // corretor
   loginTimestamp = nowMs();
   currentTab = "painel";
   renderCorretorShell(user, currentUserData);
