@@ -8,9 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 
 <style>
 body{
@@ -59,13 +57,15 @@ h2{text-align:center;}
 <script>
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAxxxxx",
+  apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
   authDomain: "proefi-alvena.firebaseapp.com",
   projectId: "proefi-alvena",
-  storageBucket: "proefi-alvena.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
+  storageBucket: "proefi-alvena.firebasestorage.app",
+  messagingSenderId: "1084612497727",
+  appId: "1:1084612497727:web:d9b1de2962cce8123b038a",
+  measurementId: "G-SZPXEMV5B4"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -78,8 +78,9 @@ auth.onAuthStateChanged(async(user)=>{
     telaLogin();
   }else{
     const doc = await db.collection("users").doc(user.uid).get();
-    const role = doc.data().role;
+    if(!doc.exists){ alert("Usuário não autorizado"); auth.signOut(); return; }
 
+    const role = doc.data().role;
     if(role==="gerente"){
       telaGerente(user);
     }else{
@@ -115,6 +116,8 @@ function telaGerente(user){
 }
 
 function telaCorretor(user){
+  loginTimestamp = Date.now();
+
   document.getElementById("app").innerHTML=`
   <div class="card">
     <h2>CORRETOR</h2>
@@ -223,4 +226,3 @@ async function finalizarExpediente(){
 </script>
 </body>
 </html>
-
