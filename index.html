@@ -34,7 +34,7 @@
     max-width:520px;
     margin:0 auto;
     padding:18px;
-    padding-bottom:90px; /* espaço para menu */
+    padding-bottom:90px;
   }
 
   .brand{
@@ -130,7 +130,6 @@
   .danger{color:#b00020; font-weight:700}
   .ok{color:#0b6b2b; font-weight:700}
 
-  /* MENU inferior (grande) */
   .bottomNav{
     position:fixed;
     left:0; right:0; bottom:0;
@@ -186,8 +185,14 @@ let detailsOpen    = false;
 let currentUser = null;
 let currentUserData = null;
 
-let currentTab = "painel"; // painel | atendimento | resultados | config
-let toggleMode = null;     // AG | PR | SI
+let currentTab = "painel";
+let toggleMode = null;
+
+// ✅ NOVO: evita pegar o mesmo lead em seguida
+let lastLeadId = null;
+
+// ✅ NOVO: cooldown (em ms) para não repetir o mesmo lead pro mesmo corretor
+const NAO_ATENDEU_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutos
 
 /** =========================
  *  Helpers
@@ -332,10 +337,14 @@ function makeLeadDoc(base){
     dataAgendada: null,
     totalTentativas: 0,
 
-    origem: null,        // geral | gerente | corretor
-    equipe: null,        // string
-    donoUpload: null,    // uid
-    listaRef: null       // id da lista
+    // ✅ NOVO: marcação do último "não atendeu" por corretor (para cooldown)
+    ultimoNaoAtendeuPor: null,
+    ultimoNaoAtendeuEm: null,
+
+    origem: null,
+    equipe: null,
+    donoUpload: null,
+    listaRef: null
   };
 }
 
@@ -397,7 +406,7 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
 
       if(origem === "geral" && distribuirGeralAgora){
         const chosen = corretoresAtivos[Math.floor(Math.random() * corretoresAtivos.length)];
-        doc.corretorId = chosen.uid;     // já nasce atribuído ao corretor
+        doc.corretorId = chosen.uid;
         doc.status = "fila";
       }
 
@@ -413,28 +422,44 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
 
 /** =========================
  *  Lead selection per source (REAL)
+ *  ✅ NOVO: busca lote e escolhe um que não seja o último + respeita cooldown
  *  ========================= */
 async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
   let q = db.collection("leads").where("status","==","fila");
 
   if(source === "geral"){
-    // Geral: já vem atribuído ao corretor no upload do diretor
     q = q.where("origem","==","geral").where("corretorId","==",corretorUid);
   }else if(source === "gerente"){
-    // Gerente: fila da equipe, ainda sem corretor definido
     q = q.where("origem","==","gerente").where("equipe","==",equipeCorretor).where("corretorId","==",null);
   }else{
-    // Minha: lista do corretor (donoUpload), ainda sem corretor definido
     q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
   }
 
-  const snap = await q.limit(1).get();
+  // ✅ pega um lote para selecionar e evitar repetição
+  const snap = await q.limit(12).get();
   if(snap.empty) return null;
 
-  const docSnap = snap.docs[0];
-  const ref = docSnap.ref;
+  const now = nowMs();
 
-  // Reservar lead para o corretor
+  // filtra: não pega o mesmo lead que acabou de aparecer
+  // e não pega lead que o mesmo corretor marcou NÃO ATENDEU nos últimos X minutos
+  const candidates = snap.docs.filter(doc => {
+    if(doc.id === lastLeadId) return false;
+
+    const d = doc.data() || {};
+    if(d.ultimoNaoAtendeuPor === corretorUid && d.ultimoNaoAtendeuEm && (now - d.ultimoNaoAtendeuEm) < NAO_ATENDEU_COOLDOWN_MS){
+      return false;
+    }
+    return true;
+  });
+
+  // se não sobrar nenhum candidato (só tinha ele mesmo), usa o primeiro mesmo
+  const chosenSnap = (candidates.length > 0)
+    ? candidates[Math.floor(Math.random() * candidates.length)]
+    : snap.docs[0];
+
+  const ref = chosenSnap.ref;
+
   await ref.update({
     status: "em atendimento",
     corretorId: corretorUid,
@@ -445,11 +470,12 @@ async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
   });
 
   const fresh = await ref.get();
+  lastLeadId = fresh.id; // ✅ guarda o último lead entregue
   return { ref, data: fresh.data() };
 }
 
 /** =========================
- *  Stats (baixo custo) + Ranking
+ *  Stats + Ranking (mantidos)
  *  ========================= */
 async function bumpStats({ uid, equipe, email, tipo }){
   const dk = dayKey(nowMs());
@@ -472,7 +498,6 @@ async function bumpStats({ uid, equipe, email, tipo }){
       atualizadoEm: nowMs()
     };
 
-    // Sempre que pega lead, conta como ligação/tentativa
     if(tipo==="LIGACAO") base.ligacoes = (base.ligacoes||0) + 1;
     if(tipo==="NAO_ATENDEU") base.naoAtendeu = (base.naoAtendeu||0) + 1;
 
@@ -502,7 +527,6 @@ async function loadMyStats(){
 }
 
 async function computeRankingEquipe(){
-  // Ranking por "atendidos" dentro da equipe, no dia
   const dk = dayKey(nowMs());
   const equipe = currentUserData?.equipe || null;
   if(!equipe) return { pos: "-", total: "-" };
@@ -709,14 +733,13 @@ function renderCorretorShell(user, userData){
 
   $("app").innerHTML = body + renderBottomNav();
 
-  // Recarregar dados que são vivos (contador/stats/ranking)
   if(currentTab === "painel" || currentTab === "resultados"){
     hydrateStatsAndRank();
   }
 }
 
 /** =========================
- *  Actions - Diretor/Gerente/Corretor
+ *  Actions
  *  ========================= */
 window.uploadListaGeral = async function(){
   const file = $("fileDiretor")?.files?.[0];
@@ -802,7 +825,7 @@ window.pegarProximoLead = async function(){
 
   const user = auth.currentUser;
   const me = await getUserDoc(user.uid);
-  const source = $("leadSource").value;
+  const source = $("leadSource") ? $("leadSource").value : "geral";
   const equipe = me.equipe || "equipe1";
 
   const picked = await pickNextLeadForCorretor({
@@ -819,9 +842,7 @@ window.pegarProximoLead = async function(){
   detailsOpen = false;
   toggleMode = null;
 
-  // Contabiliza tentativa/ligação no stats
   await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"LIGACAO" });
-
   await renderLeadInArea();
 };
 
@@ -829,7 +850,6 @@ async function renderLeadInArea(){
   const lead = leadAtualData;
   const area = $("leadArea");
 
-  // sempre pega mensagem atualizada
   const snap = await db.collection("users").doc(currentUser.uid).get();
   const userAtual = snap.exists ? (snap.data() || {}) : {};
 
@@ -872,10 +892,9 @@ window.uiNaoAtendeu = async function(){
   const me = await getUserDoc(user.uid);
   const equipe = me.equipe || "equipe1";
 
-  // volta pra fila
+  // ✅ marca cooldown pro mesmo corretor não pegar esse lead de novo imediatamente
   await leadAtualRef.update({
     status: "fila",
-    // se origem geral, mantém atribuição do corretor (pra não perder)
     corretorId: (leadAtualData.origem === "geral") ? user.uid : null,
     emAtendimentoEm: null,
     timestampDistribuicao: null,
@@ -884,18 +903,30 @@ window.uiNaoAtendeu = async function(){
     resultado: null,
     observacao: null,
     dataAgendada: null,
-    atualizadoEm: nowMs()
+    atualizadoEm: nowMs(),
+
+    ultimoNaoAtendeuPor: user.uid,
+    ultimoNaoAtendeuEm: nowMs()
   });
 
   await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"NAO_ATENDEU" });
 
+  // limpa estado atual
+  lastLeadId = leadAtualRef.id; // garante que ele não seja re-entregue logo de cara
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
   toggleMode = null;
 
-  $("leadArea").innerHTML = `<div class="center muted">Lead devolvido para a fila.</div>`;
+  $("leadArea").innerHTML = `<div class="center muted">Lead devolvido para a fila. Pegando outro...</div>`;
   hydrateStatsAndRank();
+
+  // ✅ puxa outro automaticamente (sem repetir)
+  setTimeout(()=>{
+    if(currentTab === "atendimento"){
+      window.pegarProximoLead();
+    }
+  }, 350);
 };
 
 window.uiAtendeu = function(){
@@ -928,7 +959,6 @@ window.toggleOption = function(mode){
   const extra = $("extraBox");
   if(!extra) return;
 
-  // clicou de novo na mesma → fecha
   if(toggleMode === mode){
     toggleMode = null;
     extra.innerHTML = "";
@@ -1019,7 +1049,6 @@ window.confirmarAtendeu = async function(resultado){
     atualizadoEm: nowMs()
   });
 
-  // stats por tipo
   if(resultado === "AGENDAMENTO"){
     await bumpStats({ uid:user.uid, equipe, email:user.email, tipo:"AGENDAMENTO" });
   }else if(resultado === "PROMESSA DOCUMENTAÇÃO"){
@@ -1038,7 +1067,7 @@ window.confirmarAtendeu = async function(resultado){
 };
 
 /** =========================
- *  Relatório Excel + Email
+ *  Relatório Excel + Email (mantidos)
  *  ========================= */
 window.gerarRelatorioExcel = async function(){
   const user = auth.currentUser;
@@ -1163,13 +1192,11 @@ PROEFI - ALVENA`
  *  Hydration: contador + stats + ranking
  *  ========================= */
 async function hydrateStatsAndRank(){
-  // contador
   if(loginTimestamp && $("tempoLogado")){
     const min = Math.max(0, Math.floor((nowMs() - loginTimestamp)/60000));
     $("tempoLogado").innerText = String(min);
   }
 
-  // stats
   const stats = await loadMyStats();
   const htmlStats = stats ? `
     <div>📞 Ligações: <b>${stats.ligacoes||0}</b></div>
@@ -1183,14 +1210,12 @@ async function hydrateStatsAndRank(){
   if($("statsBox")) $("statsBox").innerHTML = htmlStats;
   if($("statsBox2")) $("statsBox2").innerHTML = htmlStats;
 
-  // ranking (equipe)
   if($("rankHoje")){
     const r = await computeRankingEquipe();
     $("rankHoje").innerText = (r.pos === "-" ? "--" : `${r.pos}º de ${r.total}`);
   }
 }
 
-// atualiza contador a cada 5s sem custo alto
 setInterval(()=>{
   if(loginTimestamp && $("tempoLogado")){
     const min = Math.max(0, Math.floor((nowMs() - loginTimestamp)/60000));
@@ -1227,7 +1252,6 @@ auth.onAuthStateChanged(async (user)=>{
     return;
   }
 
-  // corretor
   loginTimestamp = nowMs();
   currentTab = "painel";
   renderCorretorShell(user, currentUserData);
