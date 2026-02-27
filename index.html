@@ -105,6 +105,49 @@ function mostrarCorretor(email) {
     <p>${email}</p>
     <button onclick="logout()">Sair</button>
     <hr>
+    <button onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
+    <div id="leadArea"></div>
+  `;
+}
+
+window.pegarLead = async function() {
+  const { collection, query, where, getDocs, updateDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+
+  const leadsRef = collection(db, "leads");
+  const q = query(leadsRef, where("status", "==", "fila"));
+  const querySnapshot = await getDocs(q);
+
+  if (querySnapshot.empty) {
+    alert("Sem leads disponíveis.");
+    return;
+  }
+
+  const leads = [];
+  querySnapshot.forEach((docSnap) => {
+    leads.push({ id: docSnap.id, ...docSnap.data() });
+  });
+
+  const leadAleatorio = leads[Math.floor(Math.random() * leads.length)];
+
+  const leadRef = doc(db, "leads", leadAleatorio.id);
+  await updateDoc(leadRef, {
+    status: "em_atendimento",
+    corretorId: auth.currentUser.uid,
+    timestampDistribuicao: Date.now()
+  });
+
+  document.getElementById("leadArea").innerHTML = `
+    <h3>Lead Atual</h3>
+    <p><strong>Nome:</strong> ${leadAleatorio.nome}</p>
+    <p><strong>Telefone:</strong> ${leadAleatorio.telefone}</p>
+    <p><strong>Email:</strong> ${leadAleatorio.email}</p>
+  `;
+};
+  document.body.innerHTML = `
+    <h1>PROEFI - CORRETOR</h1>
+    <p>${email}</p>
+    <button onclick="logout()">Sair</button>
+    <hr>
     <h3>Distribuição automática em breve</h3>
   `;
 }
@@ -115,4 +158,5 @@ function mostrarCorretor(email) {
 <h2>Carregando...</h2>
 </body>
 </html>
+
 
