@@ -1,19 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>PROEFI</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROEFI</title>
 
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-  <style>
-    body { font-family: Arial; padding: 20px; }
-    button { padding: 10px; margin: 5px 0; width: 100%; }
-    h2 { margin-bottom: 5px; }
-    #leadAtual { margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
-  </style>
+<style>
+body{
+  font-family: Arial;
+  padding:15px;
+  margin:0;
+  background:#f4f6f9;
+}
+
+h2{margin-bottom:5px}
+
+input, textarea{
+  width:100%;
+  padding:12px;
+  font-size:16px;
+  margin-bottom:10px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+button{
+  width:100%;
+  padding:14px;
+  font-size:18px;
+  margin-bottom:8px;
+  border:none;
+  border-radius:8px;
+  color:white;
+  font-weight:bold;
+}
+
+.btn-primario{background:#1e88e5;}
+.btn-whats{background:#25D366;}
+.btn-email{background:#6c63ff;}
+.btn-sms{background:#ff9800;}
+.btn-sucesso{background:#4CAF50;}
+.btn-alerta{background:#f44336;}
+.btn-neutro{background:#607d8b;}
+
+.card{
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  margin-top:15px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.1);
+}
+</style>
 </head>
 <body>
 
@@ -36,183 +77,159 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const app = document.getElementById("app");
 
-auth.onAuthStateChanged(async (user) => {
-
-  if (!user) {
-    mostrarLogin();
-    return;
-  }
+auth.onAuthStateChanged(async (user)=>{
+  if(!user){mostrarLogin(); return;}
 
   const doc = await db.collection("users").doc(user.uid).get();
-
-  if (!doc.exists) {
-    app.innerHTML = "Usuário não autorizado.";
-    return;
-  }
+  if(!doc.exists){app.innerHTML="Usuário não autorizado."; return;}
 
   const role = doc.data().role;
 
-  if (role === "gerente") {
-    mostrarGerente(user.email);
-  } else if (role === "corretor") {
-    mostrarCorretor(user.email);
-  } else {
-    app.innerHTML = "Tipo de usuário inválido.";
-  }
-
+  if(role==="gerente"){mostrarGerente(user.email);}
+  else{mostrarCorretor(user.email);}
 });
 
-function mostrarLogin() {
-  app.innerHTML = `
+function mostrarLogin(){
+  app.innerHTML=`
     <h2>PROEFI</h2>
-    <input id="email" placeholder="Email"><br><br>
-    <input id="senha" type="password" placeholder="Senha"><br><br>
-    <button onclick="login()">Entrar</button>
+    <input id="email" placeholder="Email">
+    <input id="senha" type="password" placeholder="Senha">
+    <button class="btn-primario" onclick="login()">ENTRAR</button>
   `;
 }
 
-function login() {
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
-
-  auth.signInWithEmailAndPassword(email, senha)
-    .catch(error => alert(error.message));
+function login(){
+  const email=document.getElementById("email").value;
+  const senha=document.getElementById("senha").value;
+  auth.signInWithEmailAndPassword(email,senha)
+  .catch(e=>alert(e.message));
 }
 
-function logout() {
-  auth.signOut();
-}
+function logout(){auth.signOut();}
 
-function mostrarGerente(email) {
-  app.innerHTML = `
+function mostrarGerente(email){
+  app.innerHTML=`
     <h2>PROEFI - GERENTE</h2>
     <p>${email}</p>
-    <button onclick="logout()">Sair</button>
+    <button class="btn-neutro" onclick="logout()">Sair</button>
   `;
 }
 
-function mostrarCorretor(email) {
-  app.innerHTML = `
+function mostrarCorretor(email){
+  app.innerHTML=`
     <h2>PROEFI - CORRETOR</h2>
     <p>${email}</p>
-    <button onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
+    <button class="btn-primario" onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
     <div id="leadAtual"></div>
-    <button onclick="logout()">Sair</button>
+    <button class="btn-neutro" onclick="logout()">Sair</button>
   `;
 }
 
-window.pegarLead = async function () {
+window.pegarLead = async function(){
+  const snapshot=await db.collection("leads")
+  .where("status","==","fila")
+  .limit(1).get();
 
-  const snapshot = await db.collection("leads")
-    .where("status", "==", "fila")
-    .limit(1)
-    .get();
+  if(snapshot.empty){alert("SEM LEADS DISPONÍVEIS");return;}
 
-  if (snapshot.empty) {
-    alert("SEM LEADS DISPONÍVEIS");
-    return;
-  }
-
-  const doc = snapshot.docs[0];
-  const leadRef = db.collection("leads").doc(doc.id);
-
-  await leadRef.update({
-    status: "em_atendimento",
-    corretorId: auth.currentUser.uid,
-    timestampDistribuicao: Date.now()
+  const doc=snapshot.docs[0];
+  await db.collection("leads").doc(doc.id).update({
+    status:"em_atendimento",
+    corretorId:auth.currentUser.uid,
+    timestampDistribuicao:Date.now()
   });
 
-  mostrarLead(doc.id, doc.data());
-};
+  mostrarLead(doc.id,doc.data());
+}
 
-function mostrarLead(id, data) {
+function mostrarLead(id,data){
 
-  const telefoneLimpo = data.telefone.replace(/\D/g, '');
-  const mensagem = encodeURIComponent(
-    `Olá ${data.nome}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.`
+  const telefoneLimpo=data.telefone.replace(/\D/g,'');
+  const mensagem=encodeURIComponent(
+    `Olá ${data.nome}, aqui é da equipe Alvena.`
   );
 
-  const div = document.getElementById("leadAtual");
+  const div=document.getElementById("leadAtual");
 
-  div.innerHTML = `
+  div.innerHTML=`
+  <div class="card">
     <h3>${data.nome}</h3>
-    <p>Telefone: ${data.telefone}</p>
-    <p>Email: ${data.email}</p>
+    <p><strong>Telefone:</strong> ${data.telefone}</p>
+    <p><strong>Email:</strong> ${data.email}</p>
 
     <a href="tel:${telefoneLimpo}">
-      <button>📞 LIGAR</button>
+      <button class="btn-primario">📞 LIGAR</button>
     </a>
 
     <a href="https://wa.me/55${telefoneLimpo}?text=${mensagem}" target="_blank">
-      <button>💬 WHATSAPP</button>
+      <button class="btn-whats">💬 WHATSAPP</button>
     </a>
 
-    <a href="mailto:${data.email}?subject=Contato%20Alvena&body=${mensagem}">
-      <button>📧 EMAIL</button>
+    <a href="mailto:${data.email}?subject=Contato&body=${mensagem}">
+      <button class="btn-email">📧 EMAIL</button>
     </a>
 
     <a href="sms:${telefoneLimpo}?body=${mensagem}">
-      <button>📩 SMS</button>
+      <button class="btn-sms">📩 SMS</button>
     </a>
 
-    <br>
+    <textarea id="obs" placeholder="Observação..."></textarea>
 
     <p id="contador"></p>
 
-    <button onclick="finalizarLead('${id}', 'atendeu')">ATENDEU</button>
-    <button onclick="finalizarLead('${id}', 'nao_atendeu')">NÃO ATENDEU</button>
+    <button class="btn-sucesso" onclick="finalizarLead('${id}','atendeu')">ATENDEU</button>
+    <button class="btn-alerta" onclick="finalizarLead('${id}','nao_atendeu')">NÃO ATENDEU</button>
+    <button class="btn-primario" onclick="finalizarLead('${id}','agendamento')">AGENDAMENTO</button>
+    <button class="btn-neutro" onclick="finalizarLead('${id}','pasta')">PASTA</button>
+  </div>
   `;
 
   iniciarTimer(id);
 }
 
-window.finalizarLead = async function (id, resultado) {
+window.finalizarLead=async function(id,resultado){
+
+  const observacao=document.getElementById("obs").value;
 
   await db.collection("leads").doc(id).update({
-    status: "finalizado",
-    resultado: resultado
+    status:"finalizado",
+    resultado:resultado,
+    observacao:observacao
   });
 
-  document.getElementById("leadAtual").innerHTML = "";
-};
+  document.getElementById("leadAtual").innerHTML="";
+}
 
-function iniciarTimer(id) {
+function iniciarTimer(id){
 
-  const tempoMaximo = 20 * 60 * 1000;
-  const inicio = Date.now();
+  const tempoMaximo=20*60*1000;
+  const inicio=Date.now();
 
-  const intervalo = setInterval(async () => {
+  const intervalo=setInterval(async()=>{
 
-    const agora = Date.now();
-    const restante = tempoMaximo - (agora - inicio);
+    const restante=tempoMaximo-(Date.now()-inicio);
 
-    if (restante <= 0) {
-
+    if(restante<=0){
       clearInterval(intervalo);
 
       await db.collection("leads").doc(id).update({
-        status: "fila",
-        corretorId: "",
-        timestampDistribuicao: 0
+        status:"fila",
+        corretorId:"",
+        timestampDistribuicao:0
       });
 
-      document.getElementById("leadAtual").innerHTML = "";
+      document.getElementById("leadAtual").innerHTML="";
       alert("Tempo expirado. Lead voltou para fila.");
-
-    } else {
-
-      const minutos = Math.floor(restante / 60000);
-      const segundos = Math.floor((restante % 60000) / 1000);
-
-      document.getElementById("contador").innerText =
-        `Tempo restante: ${minutos}:${segundos.toString().padStart(2, '0')}`;
-
+    }else{
+      const m=Math.floor(restante/60000);
+      const s=Math.floor((restante%60000)/1000);
+      document.getElementById("contador").innerText=
+      `Tempo restante: ${m}:${s.toString().padStart(2,'0')}`;
     }
 
-  }, 1000);
+  },1000);
 }
 
 </script>
-
 </body>
 </html>
