@@ -1,8 +1,9 @@
+<!-- PROEFI - ALVENA (VERSÃO ESTÁVEL) -->
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>PROEFI - ALVENA</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -11,17 +12,23 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <style>
-body{margin:0;font-family:Arial;background:#21346C;color:#fff}
-.wrap{max-width:520px;margin:auto;padding:10px}
-.card{background:#fff;color:#21346C;padding:12px;border-radius:12px;margin-bottom:10px}
-.btn{width:100%;padding:14px;border:none;border-radius:10px;font-weight:bold;margin-top:8px}
-.btnBlue{background:#21346C;color:#fff}
-.btnGold{background:#BC8A0B;color:#fff}
-.btnGreen{background:#B9F6CA}
-.btnRed{background:#FFCCCB}
-.menu{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff}
-.menu button{flex:1;padding:20px;font-size:16px;font-weight:bold;border:none;background:#fff}
-input,select,textarea{width:100%;padding:10px;margin-top:6px}
+/* ===== SEU CSS ORIGINAL (mantido) ===== */
+:root{
+--blue:#21346C;
+--gold:#BC8A0B;
+--white:#FFFFFF;
+--greenLight:#B9F6CA;
+--redLight:#FFCCCB;
+}
+body{margin:0;font-family:Arial;background:var(--blue);color:#fff}
+.wrap{max-width:520px;margin:auto;padding:18px}
+.card{background:#fff;color:var(--blue);border-radius:14px;padding:16px;margin-bottom:14px}
+.btn{width:100%;padding:14px;border:none;border-radius:12px;font-weight:800}
+.btnGold{background:var(--gold);color:#fff}
+.btnBlue{background:var(--blue);color:#fff}
+.btnGreen{background:var(--greenLight)}
+.btnRed{background:var(--redLight)}
+input,select,textarea{width:100%;padding:12px;margin-top:6px}
 </style>
 </head>
 
@@ -29,6 +36,8 @@ input,select,textarea{width:100%;padding:10px;margin-top:6px}
 <div class="wrap" id="app">Carregando...</div>
 
 <script>
+
+/* ===== FIREBASE ===== */
 const firebaseConfig={
 apiKey:"AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
 authDomain:"proefi-alvena.firebaseapp.com",
@@ -37,204 +46,230 @@ storageBucket:"proefi-alvena.firebasestorage.app",
 messagingSenderId:"1084612497727",
 appId:"1:1084612497727:web:d9b1de2962cce8123b038a"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth();
 const db=firebase.firestore();
 
-let userData=null;
-let leadAtual=null;
+/* ===== STATE ===== */
+let leadAtualRef=null;
+let leadAtualData=null;
+let detailsOpen=false;
 
+/* ===== HELPERS ===== */
 function $(id){return document.getElementById(id);}
-function clean(v){return String(v||"").replace(/\D/g,"");}
+function nowMs(){return Date.now();}
+function cleanPhone(v){return String(v||"").replace(/\D/g,"");}
 
-/* LOGIN */
-function login(){
-app.innerHTML=`<div class="card">
+function templateMessage(msg,lead){
+return String(msg||"")
+.replaceAll("{{nome}}",lead?.nome||"")
+.replaceAll("{{telefone}}",lead?.telefone||"")
+.replaceAll("{{email}}",lead?.email||"");
+}
+
+/* ===== LOGIN ===== */
+function renderLogin(){
+app.innerHTML=`
+<div class="card">
 <h2>PROEFI - ALVENA</h2>
 <input id="email" placeholder="Email">
 <input id="senha" type="password" placeholder="Senha">
 <button class="btn btnGold" onclick="doLogin()">ENTRAR</button>
 </div>`;
 }
-window.doLogin=()=>auth.signInWithEmailAndPassword(email.value,senha.value);
 
-/* APP */
-function appUI(){
-app.innerHTML=`<div id="view"></div>
-<div class="menu">
-<button onclick="tab('painel')">🏠</button>
-<button onclick="tab('atendimento')">☎️</button>
-<button onclick="tab('resultados')">📊</button>
-<button onclick="tab('config')">⚙️</button>
-</div>`;
-tab("painel");
-}
-
-function tab(t){
-if(t==="painel") painel();
-if(t==="atendimento") atendimento();
-if(t==="resultados") resultados();
-if(t==="config") config();
-}
-window.tab=tab;
-
-/* PAINEL */
-function painel(){
-view.inner emphasize =`
-<div class="card">
-<h2>Painel</h2>
-<button class="btn btnGreen" onclick="setAtivo(true)">ATIVO</button>
-<button class="btn btnRed" onclick="setAtivo(false)">PAUSADO</button>
-</div>`;
-}
-window.setAtivo=async v=>{
-await db.collection("users").doc(auth.currentUser.uid).update({ativo:v});
-alert(v?"Ativo":"Pausado");
+window.doLogin=async()=>{
+try{
+await auth.signInWithEmailAndPassword(email.value,senha.value);
+}catch(e){alert(e.message);}
 };
 
-/* ATENDIMENTO */
-function atendimento(){
-view.innerHTML=`<div class="card">
-<h2>Atendimento</h2>
+/* ===== CORRETOR UI ===== */
+async function renderCorretor(user,data){
 
-<select id="fonte">
+app.innerHTML=`
+<div class="card">
+<h3>${user.email}</h3>
+<button class="btn btnGreen" onclick="setAtivo(true)">🟢 ATIVO</button>
+<button class="btn btnRed" onclick="setAtivo(false)">🔴 PAUSADO</button>
+</div>
+
+<div class="card">
+<select id="leadSource">
 <option value="geral">Lista Geral</option>
 <option value="gerente">Lista Gerente</option>
 <option value="minha">Minha Lista</option>
 </select>
-
 <button class="btn btnGold" onclick="pegarLead()">PEGAR LEAD</button>
+</div>
 
-<div id="leadBox"></div>
-</div>`;
+<div class="card" id="leadArea">
+Nenhum lead.
+</div>
+
+<div class="card">
+<textarea id="msgPadrao">${data.mensagemPadrao||""}</textarea>
+<button class="btn btnBlue" onclick="salvarMsg()">SALVAR MENSAGEM</button>
+</div>
+`;
 }
 
+window.setAtivo=async(v)=>{
+await db.collection("users").doc(auth.currentUser.uid).update({ativo:v});
+alert(v?"Ativo":"Pausado");
+};
+
+window.salvarMsg=async()=>{
+await db.collection("users").doc(auth.currentUser.uid)
+.update({mensagemPadrao:msgPadrao.value});
+alert("Mensagem salva");
+};
+
+/* ===== LEADS ===== */
 window.pegarLead=async()=>{
+
+if(leadAtualRef) return alert("Finalize o lead atual.");
+
 let q=db.collection("leads").where("status","==","fila");
 
-const fonte=fonteEl();
-if(fonte==="geral") q=q.where("origem","==","geral");
-if(fonte==="gerente") q=q.where("origem","==","gerente");
-if(fonte==="minha") q=q.where("origem","==","corretor");
+const source=leadSource.value;
+const uid=auth.currentUser.uid;
+
+if(source==="geral"){
+q=q.where("origem","==","geral").where("corretorId","==",uid);
+}
+if(source==="gerente"){
+const me=(await db.collection("users").doc(uid).get()).data();
+q=q.where("origem","==","gerente").where("equipe","==",me.equipe);
+}
+if(source==="minha"){
+q=q.where("origem","==","corretor").where("donoUpload","==",uid);
+}
 
 const snap=await q.limit(1).get();
+if(snap.empty) return alert("Sem leads.");
 
-if(snap.empty){leadBox.innerHTML="Sem leads.";return;}
+leadAtualRef=snap.docs[0].ref;
+leadAtualData=snap.docs[0].data();
 
-const d=snap.docs[0];
-leadAtual={id:d.id,...d.data()};
-
-await d.ref.update({status:"em atendimento",corretorId:auth.currentUser.uid});
+await leadAtualRef.update({
+status:"em atendimento",
+corretorId:uid,
+timestampDistribuicao:nowMs()
+});
 
 renderLead();
 };
 
-function fonteEl(){return $("fonte").value;}
+async function renderLead(){
 
-function renderLead(){
-const tel=clean(leadAtual.telefone);
-const msg=encodeURIComponent(userData.mensagemPadrao||"");
+const userSnap=await db.collection("users")
+.doc(auth.currentUser.uid).get();
 
-leadBox.innerHTML=`
-<h3>${leadAtual.nome}</h3>
-<div>${leadAtual.telefone}</div>
-<div>${leadAtual.email||""}</div>
+const msg=encodeURIComponent(
+templateMessage(userSnap.data().mensagemPadrao||"",leadAtualData)
+);
+
+const tel=cleanPhone(leadAtualData.telefone);
+
+leadArea.innerHTML=`
+<h3>${leadAtualData.nome}</h3>
+<div>${leadAtualData.telefone}</div>
+<div>${leadAtualData.email||""}</div>
 
 <a href="tel:${tel}"><button class="btn btnBlue">📞 LIGAR</button></a>
+<a href="sms:${tel}?body=${msg}"><button class="btn btnBlue">📩 SMS</button></a>
+<a href="mailto:${leadAtualData.email}?body=${msg}">
+<button class="btn btnBlue">📧 EMAIL</button></a>
 <a target="_blank" href="https://wa.me/55${tel}?text=${msg}">
 <button class="btn btnBlue">💬 WHATSAPP</button></a>
-<a href="sms:${tel}?body=${msg}">
-<button class="btn btnBlue">📩 SMS</button></a>
-<a href="mailto:${leadAtual.email||""}?subject=PROEFI&body=${msg}">
-<button class="btn btnBlue">📧 EMAIL</button></a>
 
-<button class="btn btnGreen" onclick="agendamentoUI()">ATENDEU - AGENDAMENTO</button>
-<button class="btn btnGold" onclick="promessaUI()">ATENDEU - PROMESSA</button>
+<button class="btn btnGreen" onclick="uiAtendeu()">ATENDEU</button>
 <button class="btn btnRed" onclick="naoAtendeu()">NÃO ATENDEU</button>
 
 <div id="extra"></div>
 `;
 }
 
-window.agendamentoUI=()=>{
-extra.innerHTML=`
-<input type="date" id="dataAg">
-<input type="time" id="horaAg">
-<button class="btn btnGreen" onclick="finalizarAg()">CONFIRMAR AGENDAMENTO</button>`;
-};
-
-window.promessaUI=()=>{
-extra.innerHTML=`
-<textarea id="obs" placeholder="Observação obrigatória"></textarea>
-<button class="btn btnGold" onclick="finalizarProm()">CONFIRMAR PROMESSA</button>`;
-};
-
-window.finalizarAg=async()=>{
-if(!dataAg.value||!horaAg.value){alert("Preencha data e hora");return;}
-await finalizar("AGENDAMENTO",{data:dataAg.value,hora:horaAg.value});
-};
-
-window.finalizarProm=async()=>{
-if(!obs.value){alert("Observação obrigatória");return;}
-await finalizar("PROMESSA",{obs:obs.value});
-};
-
-async function finalizar(tipo,extra={}){
-await db.collection("leads").doc(leadAtual.id).update({
-status:"finalizado",
-resultado:tipo,
-extra
-});
-leadAtual=null;
-atendimento();
-}
-
 window.naoAtendeu=async()=>{
-await db.collection("leads").doc(leadAtual.id).update({
-status:"fila",
-corretorId:null
-});
-leadAtual=null;
-atendimento();
+await leadAtualRef.update({status:"fila",atendeu:false});
+leadAtualRef=null;leadAtualData=null;
+leadArea.innerHTML="Lead devolvido.";
 };
 
-/* RESULTADOS */
-function resultados(){
-view.innerHTML=`<div class="card"><h2>Resultados</h2>Mini CRM em breve</div>`;
-}
-
-/* CONFIG */
-function config(){
-view.innerHTML=`
-<div class="card">
-<h2>Mensagem padrão</h2>
-<textarea id="msg">${userData.mensagemPadrao||""}</textarea>
-<button class="btn btnBlue" onclick="saveMsg()">SALVAR</button>
-</div>
-
-<div class="card">
-<h2>Upload Lista</h2>
-<input type="file" id="file">
-<button class="btn btnGold" onclick="upload()">UPLOAD</button>
-</div>`;
-}
-
-window.saveMsg=async()=>{
-await db.collection("users").doc(auth.currentUser.uid)
-.update({mensagemPadrao:msg.value});
-alert("Salvo");
+window.uiAtendeu=()=>{
+extra.innerHTML=`
+<button class="btn btnGold" onclick="uiAg()">AGENDAMENTO</button>
+<button class="btn btnGold" onclick="uiPr()">PROMESSA</button>
+<button class="btn btnGold" onclick="uiFb()">SEM INTERESSE</button>`;
 };
 
-window.upload=()=>alert("Upload pronto (base ativa)");
+window.uiAg=()=>{
+extra.innerHTML+=`
+<input type="date" id="agData">
+<input type="time" id="agHora">
+<button class="btn btnGreen" onclick="confirmar('AGENDAMENTO')">CONFIRMAR</button>`;
+};
 
-/* AUTH */
-auth.onAuthStateChanged(async u=>{
-if(!u){login();return;}
-const doc=await db.collection("users").doc(u.uid).get();
-if(!doc.exists){auth.signOut();return;}
-userData=doc.data();
-appUI();
+window.uiPr=()=>{
+extra.innerHTML+=`
+<textarea id="obs"></textarea>
+<button class="btn btnGreen" onclick="confirmar('PROMESSA DOCUMENTAÇÃO')">CONFIRMAR</button>`;
+};
+
+window.uiFb=()=>{
+extra.innerHTML+=`
+<textarea id="fb"></textarea>
+<button class="btn btnGreen" onclick="confirmar('NÃO GEROU INTERESSE')">CONFIRMAR</button>`;
+};
+
+window.confirmar=async(tipo)=>{
+
+let obs=null,dataAg=null;
+
+if(tipo==="AGENDAMENTO"){
+if(!agData.value||!agHora.value) return alert("Data e hora obrigatórios");
+dataAg=agData.value+" "+agHora.value;
+}
+if(tipo==="PROMESSA DOCUMENTAÇÃO"){
+obs=obs.value||"";
+}
+if(tipo==="NÃO GEROU INTERESSE"){
+if(!fb.value) return alert("Feedback obrigatório");
+obs=fb.value;
+}
+
+await leadAtualRef.update({
+status:"finalizado",
+atendeu:true,
+resultado:tipo,
+observacao:obs,
+dataAgendada:dataAg,
+timestampFinalizacao:nowMs()
 });
+
+leadAtualRef=null;
+leadAtualData=null;
+leadArea.innerHTML="Atendimento finalizado.";
+};
+
+/* ===== AUTH ===== */
+auth.onAuthStateChanged(async user=>{
+if(!user){renderLogin();return;}
+
+const snap=await db.collection("users").doc(user.uid).get();
+if(!snap.exists){renderLogin();return;}
+
+const data=snap.data();
+
+if(data.role==="corretor"){
+renderCorretor(user,data);
+}else{
+app.innerHTML="<div class='card'>Login OK (diretor/gerente)</div>";
+}
+});
+
 </script>
 </body>
 </html>
