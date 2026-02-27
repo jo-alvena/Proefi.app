@@ -11,49 +11,53 @@
 
 <style>
 body{
-  font-family: Arial;
-  padding:15px;
   margin:0;
-  background:#f4f6f9;
+  font-family: 'Century Gothic', Arial;
+  background:#21346C;
+  color:#FFFFFF;
+  padding:20px;
 }
 
-h2{margin-bottom:5px}
+h2{
+  color:#BC8A0B;
+  margin-bottom:5px;
+}
+
+.card{
+  background:#FFFFFF;
+  color:#21346C;
+  padding:20px;
+  border-radius:12px;
+  margin-top:20px;
+}
 
 input, textarea{
   width:100%;
   padding:12px;
-  font-size:16px;
+  margin-top:8px;
   margin-bottom:10px;
   border-radius:8px;
   border:1px solid #ccc;
+  font-size:16px;
 }
 
 button{
   width:100%;
   padding:14px;
-  font-size:18px;
-  margin-bottom:8px;
+  margin-top:8px;
   border:none;
   border-radius:8px;
-  color:white;
+  font-size:16px;
   font-weight:bold;
 }
 
-.btn-primario{background:#1e88e5;}
-.btn-whats{background:#25D366;}
-.btn-email{background:#6c63ff;}
-.btn-sms{background:#ff9800;}
-.btn-sucesso{background:#4CAF50;}
-.btn-alerta{background:#f44336;}
-.btn-neutro{background:#607d8b;}
+.btn-primario{background:#BC8A0B;color:#FFFFFF;}
+.btn-verde{background:#A5D6A7;color:#21346C;}
+.btn-vermelho{background:#EF9A9A;color:#21346C;}
+.btn-azul{background:#21346C;color:#FFFFFF;}
+.btn-neutro{background:#BC8A0B;color:#FFFFFF;}
 
-.card{
-  background:white;
-  padding:15px;
-  border-radius:10px;
-  margin-top:15px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.1);
-}
+a{text-decoration:none;}
 </style>
 </head>
 <body>
@@ -72,19 +76,17 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth();
+const db=firebase.firestore();
+const app=document.getElementById("app");
 
-const auth = firebase.auth();
-const db = firebase.firestore();
-const app = document.getElementById("app");
+auth.onAuthStateChanged(async(user)=>{
+  if(!user){mostrarLogin();return;}
 
-auth.onAuthStateChanged(async (user)=>{
-  if(!user){mostrarLogin(); return;}
+  const doc=await db.collection("users").doc(user.uid).get();
+  if(!doc.exists){app.innerHTML="Usuário não autorizado";return;}
 
-  const doc = await db.collection("users").doc(user.uid).get();
-  if(!doc.exists){app.innerHTML="Usuário não autorizado."; return;}
-
-  const role = doc.data().role;
-
+  const role=doc.data().role;
   if(role==="gerente"){mostrarGerente(user.email);}
   else{mostrarCorretor(user.email);}
 });
@@ -125,14 +127,14 @@ function mostrarCorretor(email){
   `;
 }
 
-window.pegarLead = async function(){
+window.pegarLead=async function(){
   const snapshot=await db.collection("leads")
-  .where("status","==","fila")
-  .limit(1).get();
+  .where("status","==","fila").limit(1).get();
 
-  if(snapshot.empty){alert("SEM LEADS DISPONÍVEIS");return;}
+  if(snapshot.empty){alert("Sem leads disponíveis");return;}
 
   const doc=snapshot.docs[0];
+
   await db.collection("leads").doc(doc.id).update({
     status:"em_atendimento",
     corretorId:auth.currentUser.uid,
@@ -144,80 +146,87 @@ window.pegarLead = async function(){
 
 function mostrarLead(id,data){
 
-  const telefoneLimpo=data.telefone.replace(/\D/g,'');
-  const mensagem=encodeURIComponent(
-    `Olá ${data.nome}, aqui é da equipe Alvena.`
-  );
+  const telefone=data.telefone.replace(/\D/g,'');
+  const mensagem=encodeURIComponent(`Olá ${data.nome}, aqui é da equipe Alvena.`);
 
-  const div=document.getElementById("leadAtual");
-
-  div.innerHTML=`
+  document.getElementById("leadAtual").innerHTML=`
   <div class="card">
     <h3>${data.nome}</h3>
     <p><strong>Telefone:</strong> ${data.telefone}</p>
     <p><strong>Email:</strong> ${data.email}</p>
 
-    <a href="tel:${telefoneLimpo}">
-      <button class="btn-primario">📞 LIGAR</button>
+    <a href="tel:${telefone}"><button class="btn-azul">📞 LIGAR</button></a>
+    <a href="https://wa.me/55${telefone}?text=${mensagem}" target="_blank">
+      <button class="btn-azul">💬 WHATSAPP</button>
     </a>
 
-    <a href="https://wa.me/55${telefoneLimpo}?text=${mensagem}" target="_blank">
-      <button class="btn-whats">💬 WHATSAPP</button>
-    </a>
+    <textarea id="obs" placeholder="Observação"></textarea>
 
-    <a href="mailto:${data.email}?subject=Contato&body=${mensagem}">
-      <button class="btn-email">📧 EMAIL</button>
-    </a>
+    <input type="datetime-local" id="dataHora" style="display:none;">
 
-    <a href="sms:${telefoneLimpo}?body=${mensagem}">
-      <button class="btn-sms">📩 SMS</button>
-    </a>
+    <button class="btn-verde" onclick="finalizarLead('${id}','atendeu')">
+      ATENDEU
+    </button>
 
-    <textarea id="obs" placeholder="Observação..."></textarea>
+    <button class="btn-vermelho" onclick="finalizarLead('${id}','nao_atendeu')">
+      NÃO ATENDEU
+    </button>
+
+    <button class="btn-primario" onclick="abrirAgendamento()">
+      📅 AGENDAMENTO
+    </button>
+
+    <button class="btn-primario" onclick="finalizarLead('${id}','promessa_documentacao')">
+      PROMESSA DE DOCUMENTAÇÃO
+    </button>
 
     <p id="contador"></p>
-
-    <button class="btn-sucesso" onclick="finalizarLead('${id}','atendeu')">ATENDEU</button>
-    <button class="btn-alerta" onclick="finalizarLead('${id}','nao_atendeu')">NÃO ATENDEU</button>
-    <button class="btn-primario" onclick="finalizarLead('${id}','agendamento')">AGENDAMENTO</button>
-    <button class="btn-neutro" onclick="finalizarLead('${id}','pasta')">PASTA</button>
   </div>
   `;
 
   iniciarTimer(id);
 }
 
+function abrirAgendamento(){
+  document.getElementById("dataHora").style.display="block";
+}
+
 window.finalizarLead=async function(id,resultado){
 
   const observacao=document.getElementById("obs").value;
+  const dataHora=document.getElementById("dataHora").value;
 
+  if(resultado==="atendeu"||resultado==="nao_atendeu"){
+    await salvar(id,resultado,observacao,null);
+  }
+  else if(resultado==="promessa_documentacao"){
+    await salvar(id,resultado,observacao,null);
+  }
+}
+
+async function salvar(id,resultado,obs,dataHora){
   await db.collection("leads").doc(id).update({
     status:"finalizado",
     resultado:resultado,
-    observacao:observacao
+    observacao:obs,
+    dataAgendada:dataHora||null
   });
-
   document.getElementById("leadAtual").innerHTML="";
 }
 
 function iniciarTimer(id){
-
   const tempoMaximo=20*60*1000;
   const inicio=Date.now();
 
   const intervalo=setInterval(async()=>{
-
     const restante=tempoMaximo-(Date.now()-inicio);
-
     if(restante<=0){
       clearInterval(intervalo);
-
       await db.collection("leads").doc(id).update({
         status:"fila",
         corretorId:"",
         timestampDistribuicao:0
       });
-
       document.getElementById("leadAtual").innerHTML="";
       alert("Tempo expirado. Lead voltou para fila.");
     }else{
@@ -226,7 +235,6 @@ function iniciarTimer(id){
       document.getElementById("contador").innerText=
       `Tempo restante: ${m}:${s.toString().padStart(2,'0')}`;
     }
-
   },1000);
 }
 
