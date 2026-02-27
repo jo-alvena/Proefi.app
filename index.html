@@ -105,6 +105,11 @@
     border:2px solid rgba(33,52,108,0.25);
   }
 
+  .btnDisabled{
+    opacity:0.55;
+    cursor:not-allowed;
+  }
+
   .pill{
     display:inline-block;
     padding:6px 10px;
@@ -178,6 +183,16 @@
   .leadName{
     font-size:18px;
     font-weight:900;
+  }
+
+  .warnBox{
+    background: rgba(255,204,203,0.55);
+    border: 1px solid rgba(176,0,32,0.25);
+    color: #7a0016;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-weight: 900;
+    margin-top: 10px;
   }
 </style>
 </head>
@@ -329,19 +344,17 @@ async function ensureFixedDirector(user){
 }
 
 /** =========================
- *  ✅ FIX: Garantir pendência (quando email já existe)
+ *  Pendência (quando email já existe)
  *  ========================= */
 async function ensurePendingUserDoc({ uid, email, nome, equipe, solicitadoRole }){
   const ref = db.collection("users").doc(uid);
   const snap = await ref.get();
   const base = snap.exists ? (snap.data() || {}) : {};
 
-  // se já aprovado e com role final, não mexe
   if(base.aprovado === true && base.role && base.role !== "pendente"){
     return { status:"approved", data: base };
   }
 
-  // cria/normaliza para pendente
   const payload = {
     nome: nome || base.nome || (email ? email.split("@")[0] : "Usuário"),
     email: email || base.email || "",
@@ -393,7 +406,6 @@ window.doLogin = async function(){
   try{
     await auth.signInWithEmailAndPassword(email, senha);
 
-    // ✅ se logou e não existe doc users, cria pendente automaticamente
     const user = auth.currentUser;
     if(user){
       const snap = await db.collection("users").doc(user.uid).get();
@@ -452,17 +464,10 @@ window.criarAcesso = async function(){
   if(!equipe) return alert("Digite sua equipe (ex: equipe1).");
 
   try{
-    // tenta criar no Auth
     const cred = await auth.createUserWithEmailAndPassword(email, senha);
     const uid = cred.user.uid;
 
-    await ensurePendingUserDoc({
-      uid,
-      email,
-      nome,
-      equipe,
-      solicitadoRole: roleReq
-    });
+    await ensurePendingUserDoc({ uid, email, nome, equipe, solicitadoRole: roleReq });
 
     $("app").innerHTML = `
       ${renderBrand()}
@@ -476,12 +481,10 @@ window.criarAcesso = async function(){
       </div>
     `;
   }catch(e){
-    // ✅ EMAIL JÁ EXISTE → tenta logar e criar/normalizar pendência no Firestore
     if(String(e.code||"").includes("email-already-in-use")){
       try{
         await auth.signInWithEmailAndPassword(email, senha);
         const user = auth.currentUser;
-
         if(!user){
           alert("Não foi possível entrar com esse email/senha.");
           return;
@@ -530,17 +533,6 @@ window.criarAcesso = async function(){
   }
 };
 
-function renderUnauthorized(){
-  $("app").innerHTML = `
-    ${renderBrand()}
-    <div class="card">
-      <div class="danger">Usuário não autorizado (cadastro não encontrado em users).</div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="auth.signOut()">Sair</button>
-    </div>
-  `;
-}
-
 function renderPending(user, data){
   $("app").innerHTML = `
     ${renderHeader(user.email, "pendente")}
@@ -570,7 +562,7 @@ function renderBottomNav(tabs){
 }
 
 /** =========================
- *  Approvals (Diretor/Gerente)
+ *  Approvals
  *  ========================= */
 async function fetchPendentes({ scopeEquipe=null }){
   let q = db.collection("users")
@@ -846,6 +838,56 @@ async function setActiveStatus(uid, ativo){
 }
 
 /** =========================
+ *  ✅ NOVO: Guard de PAUSA
+ *  ========================= */
+function ensureCorretorAtivoOrWarn(){
+  if(!currentUserData || currentUserData.role !== "corretor") return true;
+  if(currentUserData.ativo === true) return true;
+
+  if(currentTab === "atendimento" && $("leadArea")){
+    const area = $("leadArea");
+    area.innerHTML = `
+      <div class="warnBox">⚠️ Você está PAUSADO. Clique em “ESTOU ATIVO” para continuar.</div>
+      <div class="divider"></div>
+      <button class="btn btnGreen" onclick="setMeActive(true)">🟢 ESTOU ATIVO</button>
+    `;
+  }else{
+    alert("Você está PAUSADO. Clique em ESTOU ATIVO para atender.");
+  }
+  return false;
+}
+
+/** =========================
+ *  ✅ NOVO: Devolver lead sem contar como “não atendeu” (para trocar lista)
+ *  ========================= */
+async function devolverLeadParaFilaSemContar(){
+  if(!leadAtualRef || !leadAtualData) return;
+
+  // devolve para fila mas não seta ultimoNaoAtendeu nem conta stats
+  await leadAtualRef.update({
+    status: "fila",
+    corretorId: (leadAtualData.origem === "geral") ? currentUser.uid : null,
+    emAtendimentoEm: null,
+    timestampFinalizacao: null,
+    atendeu: null,
+    resultado: null,
+    observacao: null,
+    dataAgendada: null,
+    atualizadoEm: nowMs()
+  });
+
+  lastLeadId = leadAtualRef.id;
+
+  leadAtualRef = null;
+  leadAtualData = null;
+  detailsOpen = false;
+  openOutcome = null;
+  draftAgData = "";
+  draftAgHora = "";
+  draftObs = "";
+}
+
+/** =========================
  *  CORRETOR UI
  *  ========================= */
 function corretorTabs(){
@@ -870,6 +912,8 @@ function renderCorretorShell(user, data){
 
   let body = "";
   if(currentTab === "painel"){
+    const disabled = ativo ? "" : "btnDisabled";
+    const disabledAttr = ativo ? "" : "disabled";
     body = `
       <div class="card">
         <div class="miniTop">
@@ -899,8 +943,23 @@ function renderCorretorShell(user, data){
           <option value="gerente">Lista do Gerente (Equipe)</option>
           <option value="minha">Minha Lista (Corretor)</option>
         </select>
+
+        ${leadAtualRef ? `
+          <div class="warnBox">
+            Você já está com um lead em atendimento.
+            <div class="small muted" style="margin-top:6px">
+              Para trocar de lista, devolva o lead atual para a fila.
+            </div>
+          </div>
+          <div class="divider"></div>
+          <button class="btn btnRed" onclick="trocarListaDevolvendoLead()">🔁 TROCAR LISTA (DEVOLVER LEAD)</button>
+        ` : `
+          <div class="divider"></div>
+          <button class="btn btnGold ${disabled}" ${disabledAttr} onclick="pegarProximoLead()">PEGAR PRÓXIMO LEAD</button>
+          ${ativo ? `` : `<div class="warnBox">⚠️ Você está PAUSADO. Ative para pegar leads.</div>`}
+        `}
+
         <div class="divider"></div>
-        <button class="btn btnGold" onclick="pegarProximoLead()">PEGAR PRÓXIMO LEAD</button>
         <div class="small muted">Dica: o atendimento fica na aba <b>📞 Atendimento</b>.</div>
       </div>
 
@@ -964,13 +1023,21 @@ function renderCorretorShell(user, data){
 
   if(currentTab === "atendimento" && leadAtualRef && leadAtualData){
     renderLeadInArea();
+  }else if(currentTab === "atendimento" && (!leadAtualRef)){
+    // nothing
   }
+
   if(currentTab === "painel"){
     startSessionClock();
     hydrateMyDayStats();
   }
   if(currentTab === "resultados"){
     hydrateMiniCrmHoje();
+  }
+
+  // Se estiver pausado e estiver na aba atendimento, avisa/bloqueia
+  if(currentTab === "atendimento" && currentUserData?.ativo !== true){
+    ensureCorretorAtivoOrWarn();
   }
 }
 
@@ -991,6 +1058,23 @@ function startSessionClock(){
 window.setMeActive = async function(ativo){
   await setActiveStatus(currentUser.uid, ativo);
   currentUserData = await getUserDoc(currentUser.uid);
+
+  // Se pausar, devolve o lead atual automaticamente (pra não “atender pausado”)
+  if(currentUserData?.ativo === false && leadAtualRef){
+    await devolverLeadParaFilaSemContar();
+  }
+
+  renderCorretorShell(currentUser, currentUserData);
+};
+
+window.trocarListaDevolvendoLead = async function(){
+  if(!leadAtualRef) return;
+
+  const ok = confirm("Trocar de lista? O lead atual será devolvido para a fila (sem contar como NÃO ATENDEU).");
+  if(!ok) return;
+
+  await devolverLeadParaFilaSemContar();
+  alert("Lead devolvido. Agora você pode selecionar outra lista.");
   renderCorretorShell(currentUser, currentUserData);
 };
 
@@ -1017,7 +1101,10 @@ window.uploadListaCorretor = async function(){
 };
 
 window.pegarProximoLead = async function(){
-  if(leadAtualRef) return alert("Você já está com um lead em atendimento. Finalize antes de pegar outro.");
+  // ✅ bloqueia se estiver pausado
+  if(!ensureCorretorAtivoOrWarn()) return;
+
+  if(leadAtualRef) return alert("Você já está com um lead em atendimento. Use TROCAR LISTA para devolver e mudar.");
   const source = $("leadSource") ? $("leadSource").value : "geral";
   const equipe = currentUserData?.equipe || "equipe1";
 
@@ -1047,6 +1134,9 @@ window.pegarProximoLead = async function(){
 };
 
 async function renderLeadInArea(){
+  // ✅ se pausado, não permite atendimento
+  if(!ensureCorretorAtivoOrWarn()) return;
+
   const area = $("leadArea");
   if(!area || !leadAtualData) return;
 
@@ -1093,6 +1183,10 @@ async function renderLeadInArea(){
       <button class="btn btnRed" onclick="uiNaoAtendeu()">NÃO ATENDEU</button>
     </div>
 
+    <div style="margin-top:10px">
+      <button class="btn btnRed" onclick="trocarListaDevolvendoLead()">🔁 TROCAR LISTA (DEVOLVER LEAD)</button>
+    </div>
+
     <div id="atendeuBox"></div>
   `;
 
@@ -1102,6 +1196,9 @@ async function renderLeadInArea(){
 }
 
 window.uiNaoAtendeu = async function(){
+  // ✅ bloqueia se estiver pausado
+  if(!ensureCorretorAtivoOrWarn()) return;
+
   if(!leadAtualRef) return;
 
   const equipe = currentUserData?.equipe || "equipe1";
@@ -1148,6 +1245,9 @@ window.uiNaoAtendeu = async function(){
 };
 
 window.uiAtendeu = function(){
+  // ✅ bloqueia se estiver pausado
+  if(!ensureCorretorAtivoOrWarn()) return;
+
   if(!leadAtualRef) return;
   detailsOpen = !detailsOpen;
   if(detailsOpen){
@@ -1247,6 +1347,9 @@ window.cancelarAtendeu = function(){
 };
 
 window.confirmarAtendeu = async function(){
+  // ✅ bloqueia se estiver pausado
+  if(!ensureCorretorAtivoOrWarn()) return;
+
   if(!leadAtualRef) return;
 
   persistDraftFromOpenOutcome();
@@ -1321,7 +1424,7 @@ window.confirmarAtendeu = async function(){
 };
 
 /** =========================
- *  CORRETOR: Relatório Excel + Email
+ *  Relatório Excel + Email (mantido)
  *  ========================= */
 window.gerarRelatorioExcel = async function(){
   const snap = await db.collection("leads").where("corretorId","==",currentUser.uid).get();
@@ -1492,7 +1595,7 @@ async function hydrateMiniCrmHoje(){
 }
 
 /** =========================
- *  GERENTE UI
+ *  GERENTE / DIRETOR (mantido do seu código atual)
  *  ========================= */
 function gerenteTabs(){
   return [
@@ -1505,63 +1608,6 @@ window.goTabGerente = function(tab){
   currentTab = tab;
   renderGerenteShell(currentUser, currentUserData);
 };
-
-function renderGerenteShell(user, data){
-  const equipe = data?.equipe || "equipe1";
-  const header = renderHeader(user.email, "gerente", `<div class="pill">Equipe: ${equipe}</div>`);
-  let body = "";
-
-  if(currentTab === "painel"){
-    body = `
-      <div class="card">
-        <div><b>Equipe • Totais do dia</b></div>
-        <div class="divider"></div>
-        <div id="totaisEquipe" class="small muted">Carregando...</div>
-      </div>
-
-      <div class="card">
-        <div><b>Ranking • Corretores (Hoje)</b></div>
-        <div class="divider"></div>
-        <div id="rankingCorretoresEquipe" class="small muted">Carregando...</div>
-      </div>
-    `;
-  }
-
-  if(currentTab === "upload"){
-    body = `
-      <div class="card">
-        <div><b>Upload • Lista do Gerente</b></div>
-        <div class="small muted">A fila ficará disponível para sua equipe.</div>
-        <div class="divider"></div>
-        <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
-        <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR LISTA DA EQUIPE</button>
-        <div class="small muted">Leads entram em <b>fila</b> da equipe (${equipe}).</div>
-      </div>
-
-      <div class="card">
-        <div><b>Email para relatórios</b></div>
-        <div class="small muted">Usado para o corretor enviar o relatório (email pronto).</div>
-        <div class="divider"></div>
-        <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${data?.emailRelatorio || ""}" />
-        <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
-      </div>
-    `;
-  }
-
-  if(currentTab === "aprov"){
-    body = `
-      <div class="card">
-        <div><b>Aprovações pendentes</b></div>
-        <div class="small muted">O gerente aprova apenas pendentes da <b>sua equipe</b> (como CORRETOR).</div>
-        <div class="divider"></div>
-        <div id="pendentesGerente" class="small muted">Carregando...</div>
-      </div>
-    `;
-  }
-
-  $("app").innerHTML = header + body + renderBottomNav(gerenteTabs());
-  hydrateGerenteTab();
-}
 
 async function getEquipeStatsHoje(equipe){
   const dk = dayKey(nowMs());
@@ -1646,14 +1692,6 @@ window.rejeitarPendente = async function(uid){
   if(currentUserData?.role === "gerente") hydrateGerenteTab();
 };
 
-window.salvarEmailRelatorio = async function(){
-  const email = ($("emailRelatorio")?.value || "").trim();
-  if(!email) return alert("Digite o email do gerente para relatórios.");
-  await db.collection("users").doc(currentUser.uid).update({ emailRelatorio: email });
-  currentUserData = await getUserDoc(currentUser.uid);
-  alert("Email de relatórios salvo!");
-};
-
 window.uploadListaGerente = async function(){
   const file = $("fileGerente")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
@@ -1669,9 +1707,63 @@ window.uploadListaGerente = async function(){
   }
 };
 
-/** =========================
- *  DIRETOR UI
- *  ========================= */
+function renderGerenteShell(user, data){
+  const equipe = data?.equipe || "equipe1";
+  const header = renderHeader(user.email, "gerente", `<div class="pill">Equipe: ${equipe}</div>`);
+  let body = "";
+
+  if(currentTab === "painel"){
+    body = `
+      <div class="card">
+        <div><b>Equipe • Totais do dia</b></div>
+        <div class="divider"></div>
+        <div id="totaisEquipe" class="small muted">Carregando...</div>
+      </div>
+
+      <div class="card">
+        <div><b>Ranking • Corretores (Hoje)</b></div>
+        <div class="divider"></div>
+        <div id="rankingCorretoresEquipe" class="small muted">Carregando...</div>
+      </div>
+    `;
+  }
+
+  if(currentTab === "upload"){
+    body = `
+      <div class="card">
+        <div><b>Upload • Lista do Gerente</b></div>
+        <div class="small muted">A fila ficará disponível para sua equipe.</div>
+        <div class="divider"></div>
+        <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
+        <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR LISTA DA EQUIPE</button>
+        <div class="small muted">Leads entram em <b>fila</b> da equipe (${equipe}).</div>
+      </div>
+
+      <div class="card">
+        <div><b>Email para relatórios</b></div>
+        <div class="small muted">Usado para o corretor enviar o relatório (email pronto).</div>
+        <div class="divider"></div>
+        <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${data?.emailRelatorio || ""}" />
+        <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
+      </div>
+    `;
+  }
+
+  if(currentTab === "aprov"){
+    body = `
+      <div class="card">
+        <div><b>Aprovações pendentes</b></div>
+        <div class="small muted">O gerente aprova apenas pendentes da <b>sua equipe</b> (como CORRETOR).</div>
+        <div class="divider"></div>
+        <div id="pendentesGerente" class="small muted">Carregando...</div>
+      </div>
+    `;
+  }
+
+  $("app").innerHTML = header + body + renderBottomNav(gerenteTabs());
+  hydrateGerenteTab();
+}
+
 function diretorTabs(){
   return [
     { id:"painel", label:"🏠 Painel", handler:"goTabDiretor" },
@@ -1700,55 +1792,6 @@ async function getGeralHoje(){
     return acc;
   }, { ligacoes:0, naoAtendeu:0, atendidos:0, agendamentos:0, promessas:0, semInteresse:0 });
   return { list, total };
-}
-
-function renderDiretorShell(user, data){
-  const header = renderHeader(user.email, "diretor");
-  let body = "";
-
-  if(currentTab === "painel"){
-    body = `
-      <div class="card">
-        <div><b>Geral • Totais do dia</b></div>
-        <div class="divider"></div>
-        <div id="totaisGeral" class="small muted">Carregando...</div>
-      </div>
-
-      <div class="card">
-        <div><b>Ranking • Equipes / Gerentes (Hoje)</b></div>
-        <div class="small muted">Soma do dia por equipe.</div>
-        <div class="divider"></div>
-        <div id="rankingGerentes" class="small muted">Carregando...</div>
-      </div>
-    `;
-  }
-
-  if(currentTab === "upload"){
-    body = `
-      <div class="card">
-        <div><b>Upload • Lista Geral (Diretoria)</b></div>
-        <div class="small muted">Aceita XLS/XLSX/CSV. Colunas: Nome | Telefone | Email</div>
-        <div class="divider"></div>
-        <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
-        <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
-        <div class="small muted">Distribui ALEATORIAMENTE no upload para corretores <b>ATIVOS</b>.</div>
-      </div>
-    `;
-  }
-
-  if(currentTab === "aprov"){
-    body = `
-      <div class="card">
-        <div><b>Aprovações pendentes</b></div>
-        <div class="small muted">Diretor aprova qualquer equipe e define CORRETOR ou GERENTE.</div>
-        <div class="divider"></div>
-        <div id="pendentesDiretor" class="small muted">Carregando...</div>
-      </div>
-    `;
-  }
-
-  $("app").innerHTML = header + body + renderBottomNav(diretorTabs());
-  hydrateDiretorTab();
 }
 
 async function hydrateDiretorTab(){
@@ -1844,6 +1887,14 @@ window.aprovarPendenteDiretor = async function(uid){
   hydrateDiretorTab();
 };
 
+window.salvarEmailRelatorio = async function(){
+  const email = ($("emailRelatorio")?.value || "").trim();
+  if(!email) return alert("Digite o email do gerente para relatórios.");
+  await db.collection("users").doc(currentUser.uid).update({ emailRelatorio: email });
+  currentUserData = await getUserDoc(currentUser.uid);
+  alert("Email de relatórios salvo!");
+};
+
 window.uploadListaGeral = async function(){
   const file = $("fileDiretor")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
@@ -1858,6 +1909,55 @@ window.uploadListaGeral = async function(){
     alert(e.message);
   }
 };
+
+function renderDiretorShell(user, data){
+  const header = renderHeader(user.email, "diretor");
+  let body = "";
+
+  if(currentTab === "painel"){
+    body = `
+      <div class="card">
+        <div><b>Geral • Totais do dia</b></div>
+        <div class="divider"></div>
+        <div id="totaisGeral" class="small muted">Carregando...</div>
+      </div>
+
+      <div class="card">
+        <div><b>Ranking • Equipes / Gerentes (Hoje)</b></div>
+        <div class="small muted">Soma do dia por equipe.</div>
+        <div class="divider"></div>
+        <div id="rankingGerentes" class="small muted">Carregando...</div>
+      </div>
+    `;
+  }
+
+  if(currentTab === "upload"){
+    body = `
+      <div class="card">
+        <div><b>Upload • Lista Geral (Diretoria)</b></div>
+        <div class="small muted">Aceita XLS/XLSX/CSV. Colunas: Nome | Telefone | Email</div>
+        <div class="divider"></div>
+        <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
+        <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
+        <div class="small muted">Distribui ALEATORIAMENTE no upload para corretores <b>ATIVOS</b>.</div>
+      </div>
+    `;
+  }
+
+  if(currentTab === "aprov"){
+    body = `
+      <div class="card">
+        <div><b>Aprovações pendentes</b></div>
+        <div class="small muted">Diretor aprova qualquer equipe e define CORRETOR ou GERENTE.</div>
+        <div class="divider"></div>
+        <div id="pendentesDiretor" class="small muted">Carregando...</div>
+      </div>
+    `;
+  }
+
+  $("app").innerHTML = header + body + renderBottomNav(diretorTabs());
+  hydrateDiretorTab();
+}
 
 /** =========================
  *  BOOTSTRAP
@@ -1882,12 +1982,10 @@ auth.onAuthStateChanged(async (user)=>{
     return;
   }
 
-  // garante que SEU EMAIL seja SEMPRE diretor
   await ensureFixedDirector(user);
 
   const userSnap = await db.collection("users").doc(user.uid).get();
   if(!userSnap.exists){
-    // ✅ agora cria pendente automaticamente em vez de bloquear
     await ensurePendingUserDoc({
       uid: user.uid,
       email: user.email,
