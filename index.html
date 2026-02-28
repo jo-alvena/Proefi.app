@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>PROEFI</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
+<body>
+  <div id="app">Carregando...</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
+  authDomain: "proefi-alvena.firebaseapp.com",
+  projectId: "proefi-alvena",
+  storageBucket: "proefi-alvena.firebasestorage.app",
+  messagingSenderId: "1084612497727",
+  appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const app = document.getElementById("app");
+
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    mostrarLogin();
+  } else {
+    const doc = await db.collection("users").doc(user.uid).get();
+    if (!doc.exists) {
+      app.innerHTML = "Usuário não autorizado.";
+      return;
+    }
+
+    const tipo = doc.data().tipo;
+
+    if (tipo === "gerente") {
+      mostrarGerente(user.email);
+    } else {
+      mostrarCorretor(user.email);
+    }
+  }
+});
+
+function mostrarLogin() {
+  app.innerHTML = `
+    <h2>PROEFI</h2>
+    <input id="email" placeholder="Email"><br><br>
+    <input id="senha" type="password" placeholder="Senha"><br><br>
+    <button onclick="login()">Entrar</button>
+  `;
+}
+
+function login() {
+  const email = document.getElementById("email").value;
+  const senha = document.getElementById("senha").value;
+
+  auth.signInWithEmailAndPassword(email, senha)
+    .catch(e => alert(e.message));
+}
+
+function logout() {
+  auth.signOut();
+}
+
+function mostrarGerente(email) {
+  app.innerHTML = `
+    <h2>PROEFI - GERENTE</h2>
+    <p>${email}</p>
+    <button onclick="logout()">Sair</button>
+  `;
+}
+
+function mostrarCorretor(email) {
+  app.innerHTML = `
+    <h2>PROEFI - CORRETOR</h2>
+    <p>${email}</p>
+    <button onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
+    <div id="leadAtual"></div>
+    <button onclick="logout()">Sair</button>
+  `;
+}
+
+window.pegarLead = async function () {
+  const snapshot = await db.collection("leads")
+    .where("status", "==", "fila")
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    alert("SEM LEADS DISPONÍVEIS");
+    return;
+  }
+
+  const doc = snapshot.docs[0];
+  const leadRef = db.collection("leads").doc(doc.id);
+
+  await leadRef.update({
+    status: "em_atendimento",
+    corretorId: auth.currentUser.uid,
+    timestampDistribuicao: Date.now()
+  });
+
+  mostrarLead(doc.id, doc.data());
+};
+
+function mostrarLead(id, data) {
+  const div = document.getElementById("leadAtual");
+
+  div.innerHTML = `
+    <h3>${data.nome}</h3>
+    <p>Telefone: ${data.telefone}</p>
+    <p>Email: ${data.email}</p>
+    <p id="contador"></p>
+    <button onclick="finalizarLead('${id}', 'atendeu')">ATENDEU</button>
+    <button onclick="finalizarLead('${id}', 'nao_atendeu')">NÃO ATENDEU</button>
+  `;
+
+  iniciarTimer(id);
+}
+
+window.finalizarLead = async function (id, resultado) {
+  await db.collection("leads").doc(id).update({
+    status: "finalizado",
+    resultado: resultado
+  });
+
+  document.getElementById("leadAtual").innerHTML = "";
+};
+
+function iniciarTimer(id) {
+  const tempoMaximo = 20 * 60 * 1000;
+  const inicio = Date.now();
+
+  const intervalo = setInterval(async () => {
+    const agora = Date.now();
+    const restante = tempoMaximo - (agora - inicio);
+
+    if (restante <= 0) {
+      clearInterval(intervalo);
+
+      await db.collection("leads").doc(id).update({
+        status: "fila",
+        corretorId: "",
+        timestampDistribuicao: 0
+      });
+
+      document.getElementById("leadAtual").innerHTML = "";
+      alert("Tempo expirado. Lead voltou para fila.");
+    } else {
+      const minutos = Math.floor(restante / 60000);
+      const segundos = Math.floor((restante % 60000) / 1000);
+      document.getElementById("contador").innerText =
+        `Tempo restante: ${minutos}:${segundos.toString().padStart(2, '0')}`;
+    }
+  }, 1000);
+}
+</script>
+</body>
+</html>
