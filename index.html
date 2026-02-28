@@ -1,163 +1,1920 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>PROEFI</title>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>PROEFI - ALVENA</title>
+
+  <!-- Firebase compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- XLSX -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root{
+      --blue:#21346C;
+      --gold:#BC8A0B;
+      --white:#FFFFFF;
+      --bg:#0f1b3f;
+
+      --greenLight:#B9F6CA;
+      --redLight:#FFCCCB;
+      --cardShadow: 0 10px 26px rgba(0,0,0,0.16);
+
+      --radius:16px;
+      --pad:16px;
+      --gap:12px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, var(--blue), var(--bg));
+      color: var(--white);
+      min-height:100vh;
+    }
+
+    .wrap{
+      max-width: 820px;
+      margin:0 auto;
+      padding: 16px 14px 86px;
+    }
+
+    .brand{
+      text-align:center;
+      margin: 10px 0 18px;
+      padding: 8px 0;
+    }
+    .brand h1{
+      margin:0;
+      font-size: 28px;
+      letter-spacing: 0.6px;
+      color: var(--gold);
+    }
+    .brand .sub{
+      margin-top:6px;
+      line-height:1.25;
+      font-size: 14px;
+      opacity:0.95;
+    }
+
+    .card{
+      background: var(--white);
+      color: var(--blue);
+      border-radius: var(--radius);
+      padding: var(--pad);
+      box-shadow: var(--cardShadow);
+      margin-bottom: 14px;
+    }
+
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .grow{ flex:1; min-width: 180px; }
+
+    .divider{ height:1px; background:rgba(33,52,108,0.12); margin:12px 0; }
+    .muted{ opacity:0.76; }
+    .small{ font-size: 12px; }
+    .center{ text-align:center; }
+
+    input, select, textarea{
+      width:100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(33,52,108,0.25);
+      font-size: 16px;
+      outline:none;
+    }
+    textarea{ min-height: 96px; resize: vertical; }
+
+    .fieldLabel{
+      font-size: 12px;
+      opacity: 0.88;
+      margin: 12px 0 6px;
+    }
+
+    .btn{
+      width:100%;
+      padding: 14px;
+      border:none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 900;
+      cursor:pointer;
+      transition: transform .06s ease;
+    }
+    .btn:active{ transform: scale(0.99); }
+
+    .btnGold{ background: var(--gold); color: var(--white); }
+    .btnBlue{ background: var(--blue); color: var(--white); }
+    .btnGreen{ background: var(--greenLight); color: var(--blue); }
+    .btnRed{ background: var(--redLight); color: var(--blue); }
+    .btnGhost{
+      background: transparent;
+      color: var(--blue);
+      border: 2px solid rgba(33,52,108,0.25);
+    }
+    .btnDisabled{
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+    @media (max-width:520px){
+      .grid3{ grid-template-columns: 1fr; }
+      .wrap{ padding-bottom: 96px; }
+    }
+
+    a{ text-decoration:none; }
+    .pill{
+      display:inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      background: rgba(188,138,11,0.12);
+      color: var(--blue);
+      white-space: nowrap;
+    }
+
+    .danger{ color:#b00020; font-weight:900; }
+    .ok{ color:#0b6b2b; font-weight:900; }
+
+    /* Tabs bottom (mobile-first) */
+    .tabs{
+      position: fixed;
+      left:0; right:0; bottom:0;
+      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+      background: rgba(15, 27, 63, 0.96);
+      border-top: 1px solid rgba(255,255,255,0.12);
+      display:flex;
+      gap: 10px;
+      justify-content:center;
+      z-index:9999;
+    }
+    .tabBtn{
+      flex:1;
+      max-width: 220px;
+      padding: 14px 10px; /* bigger as you asked */
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: var(--white);
+      font-weight: 900;
+      font-size: 16px;
+      cursor:pointer;
+    }
+    .tabActive{
+      background: rgba(188,138,11,0.22);
+      border-color: rgba(188,138,11,0.62);
+    }
+
+    /* Mini CRM list */
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .item{
+      border: 1px solid rgba(33,52,108,0.12);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(33,52,108,0.03);
+    }
+    .itemTop{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .tag{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:900;
+      background: rgba(33,52,108,0.10);
+    }
+    .tagAg{ background: rgba(185,246,202,0.8); }
+    .tagPr{ background: rgba(188,138,11,0.18); }
+    .tagSi{ background: rgba(255,204,203,0.8); }
+
+    /* Results responsive fix */
+    .tableWrap{
+      overflow-x:auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 14px;
+      border: 1px solid rgba(33,52,108,0.12);
+    }
+    table{
+      border-collapse: collapse;
+      width:100%;
+      min-width: 720px;
+      background: #fff;
+      color: var(--blue);
+    }
+    th, td{
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(33,52,108,0.08);
+      text-align:left;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    th{
+      background: rgba(33,52,108,0.04);
+      font-weight: 900;
+    }
+
+    /* Collapsible finalize panel */
+    .collapseHeader{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(33,52,108,0.12);
+      background: rgba(33,52,108,0.03);
+      cursor:pointer;
+      user-select:none;
+      font-weight: 900;
+    }
+    .collapseBody{
+      margin-top:10px;
+      display:none;
+    }
+    .collapseBody.open{ display:block; }
+
+    /* Modal confirm */
+    .modalBackdrop{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 16px;
+      z-index:10000;
+    }
+    .modal{
+      width:100%;
+      max-width:520px;
+      background:#fff;
+      color: var(--blue);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+    }
+    .modal h3{ margin: 0 0 8px; }
+  </style>
 </head>
+
 <body>
-  <div id="app">Carregando...</div>
+  <div class="wrap" id="app">Carregando...</div>
+
+  <!-- modal -->
+  <div class="modalBackdrop" id="modalBackdrop">
+    <div class="modal">
+      <h3 id="modalTitle">Confirmar</h3>
+      <div id="modalText" class="muted" style="margin-bottom:12px"></div>
+      <div class="grid2">
+        <button class="btn btnGhost" onclick="closeModal(false)">Cancelar</button>
+        <button class="btn btnGold" onclick="closeModal(true)">OK</button>
+      </div>
+    </div>
+  </div>
 
 <script>
+/** =========================================================
+ *  PROEFI - ALVENA (Single-file)
+ *  Diretor / Gerente / Corretor + Aprovação + Leads + Mini CRM
+ *  Relatórios DE/ATÉ + Top5 + Gamificação + Responsivo
+ *  ========================================================= */
+
+/** =========================
+ *  CONFIG: Firebase
+ *  ========================= */
 const firebaseConfig = {
   apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
   authDomain: "proefi-alvena.firebaseapp.com",
   projectId: "proefi-alvena",
   storageBucket: "proefi-alvena.firebasestorage.app",
   messagingSenderId: "1084612497727",
-  appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
+  appId: "1:1084612497727:web:d9b1de2962cce8123b038a",
+  measurementId: "G-SZPXEMV5B4"
 };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-const db = firebase.firestore();
-const app = document.getElementById("app");
+const db   = firebase.firestore();
 
-auth.onAuthStateChanged(async (user) => {
-  if (!user) {
-    mostrarLogin();
-  } else {
-    const doc = await db.collection("users").doc(user.uid).get();
-    if (!doc.exists) {
-      app.innerHTML = "Usuário não autorizado.";
-      return;
-    }
+/** =========================
+ *  CONSTANTES IMPORTANTES
+ *  ========================= */
+const MASTER_DIRECTOR_EMAIL = "jo.alvenasolucoes@gmail.com"; // sempre diretor master
 
-    const tipo = doc.data().tipo;
+/** =========================
+ *  STATE GLOBAL
+ *  ========================= */
+let loginTimestamp = null;
+let leadAtualRef = null;
+let leadAtualData = null;
+let detailsOpen = false;
 
-    if (tipo === "gerente") {
-      mostrarGerente(user.email);
-    } else {
-      mostrarCorretor(user.email);
+let currentTab = "painel"; // painel | atendimento | minicrm | resultados | config | aprovacao
+let cachedUserData = null;
+let cachedAuthUser = null;
+
+let modalResolve = null;
+
+/** =========================
+ *  HELPERS
+ *  ========================= */
+function $(id){ return document.getElementById(id); }
+function nowMs(){ return Date.now(); }
+function cleanPhone(raw){ return String(raw||"").replace(/\D/g,''); }
+
+function dayKey(ts){
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function timeMin(ms){ return Math.max(0, Math.floor(ms/60000)); }
+
+function toISODateInput(ts){
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+
+function templateMessage(msg, lead){
+  const nome = lead?.nome || "";
+  const tel  = lead?.telefone || "";
+  const em   = lead?.email || "";
+  return String(msg || "")
+    .replaceAll("{{nome}}", nome)
+    .replaceAll("{{telefone}}", tel)
+    .replaceAll("{{email}}", em);
+}
+
+async function getUserDoc(uid){
+  const snap = await db.collection("users").doc(uid).get();
+  return snap.exists ? snap.data() : null;
+}
+
+function safe(v){ return (v===undefined || v===null) ? "" : String(v); }
+
+function beepCash(){
+  // som simples, leve, sem arquivos externos (WebAudio)
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(740, ctx.currentTime);
+    g.gain.setValueAtTime(0.001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.25);
+  }catch(e){}
+}
+
+/** =========================
+ *  MODAL CONFIRM
+ *  ========================= */
+function openModal(title, text){
+  $("modalTitle").textContent = title || "Confirmar";
+  $("modalText").textContent = text || "";
+  $("modalBackdrop").style.display = "flex";
+  return new Promise(res => { modalResolve = res; });
+}
+function closeModal(ok){
+  $("modalBackdrop").style.display = "none";
+  if(modalResolve) modalResolve(!!ok);
+  modalResolve = null;
+}
+
+/** =========================
+ *  UI BASE
+ *  ========================= */
+function renderBrand(){
+  return `
+    <div class="brand">
+      <h1>PROEFI - ALVENA</h1>
+      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliária</div>
+    </div>
+  `;
+}
+
+function renderHeader(role, email, extraHtml=""){
+  return `
+    ${renderBrand()}
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div><b>${role.toUpperCase()}</b></div>
+          <div class="small muted">${email}</div>
+        </div>
+        ${extraHtml}
+      </div>
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="logout()">SAIR</button>
+    </div>
+  `;
+}
+
+function renderTabsForRole(role){
+  // corretor: painel, atendimento, mini, resultados, config
+  // gerente: painel, mini, resultados, config (sem atendimento)
+  // diretor: painel, mini, resultados, config, aprovacao
+  let tabs = [];
+
+  if(role === "corretor"){
+    tabs = [
+      ["painel","PAINEL"],
+      ["atendimento","ATENDIMENTO"],
+      ["minicrm","MINI CRM"],
+      ["resultados","RESULTADOS"],
+      ["config","CONFIG"]
+    ];
+  }else if(role === "gerente"){
+    tabs = [
+      ["painel","PAINEL"],
+      ["minicrm","MINI CRM"],
+      ["resultados","RESULTADOS"],
+      ["config","CONFIG"]
+    ];
+  }else{ // diretor
+    tabs = [
+      ["painel","PAINEL"],
+      ["minicrm","MINI CRM"],
+      ["resultados","RESULTADOS"],
+      ["aprovacao","APROVAÇÕES"],
+      ["config","CONFIG"]
+    ];
+  }
+
+  return `
+    <div class="tabs">
+      ${tabs.map(([key,label]) => `
+        <button class="tabBtn ${currentTab===key ? "tabActive":""}" onclick="goTab('${key}')">${label}</button>
+      `).join("")}
+    </div>
+  `;
+}
+
+window.goTab = async function(tab){
+  currentTab = tab;
+  await renderAppShell(); // re-render
+};
+
+/** =========================
+ *  AUTH UI
+ *  ========================= */
+function renderLogin(){
+  $("app").innerHTML = `
+    ${renderBrand()}
+    <div class="card">
+      <div class="fieldLabel">Email</div>
+      <input id="email" placeholder="Digite seu email" style="border:2px solid var(--gold)" />
+
+      <div class="fieldLabel">Senha</div>
+      <input id="senha" type="password" placeholder="Digite sua senha" style="border:2px solid var(--gold)" />
+
+      <div class="divider"></div>
+      <div class="grid2">
+        <button class="btn btnGold" onclick="doLogin()">ENTRAR</button>
+        <button class="btn btnBlue" onclick="openSignup()">CRIAR ACESSO</button>
+      </div>
+      <div class="divider"></div>
+      <div class="small muted center">
+        Se você criar acesso, ficará como <b>PENDENTE</b> até aprovação do Diretor/Gestor.
+      </div>
+    </div>
+
+    <div class="card" id="signupBox" style="display:none">
+      <div><b>Criar acesso (Pendente)</b></div>
+      <div class="small muted">O Diretor/Gestor aprova pelo painel.</div>
+      <div class="divider"></div>
+
+      <div class="fieldLabel">Nome</div>
+      <input id="nomeSignup" placeholder="Seu nome" />
+
+      <div class="fieldLabel">Equipe (ex: equipe1)</div>
+      <input id="equipeSignup" placeholder="ex: equipe1" />
+
+      <div class="fieldLabel">Perfil</div>
+      <select id="roleSignup">
+        <option value="corretor">CORRETOR</option>
+        <option value="gerente">GERENTE</option>
+      </select>
+
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="doSignup()">CRIAR E AGUARDAR APROVAÇÃO</button>
+      <button class="btn btnGhost" style="margin-top:10px" onclick="closeSignup()">CANCELAR</button>
+    </div>
+  `;
+}
+
+window.openSignup = function(){ $("signupBox").style.display = "block"; };
+window.closeSignup = function(){ $("signupBox").style.display = "none"; };
+
+window.doLogin = async function(){
+  const email = $("email").value.trim();
+  const senha = $("senha").value;
+  try{
+    await auth.signInWithEmailAndPassword(email, senha);
+  }catch(e){
+    alert(e.message || e.code);
+  }
+};
+
+window.doSignup = async function(){
+  const email = $("email").value.trim();
+  const senha = $("senha").value;
+  const nome = ($("nomeSignup").value || "").trim();
+  const equipe = ($("equipeSignup").value || "").trim() || "equipe1";
+  const role = $("roleSignup").value;
+
+  if(!email || !senha) return alert("Preencha email e senha.");
+  if(senha.length < 6) return alert("Senha mínima: 6 caracteres.");
+  if(!nome) return alert("Preencha seu nome.");
+
+  try{
+    // cria auth
+    const cred = await auth.createUserWithEmailAndPassword(email, senha);
+    const uid = cred.user.uid;
+
+    // cria doc users (pendente)
+    await db.collection("users").doc(uid).set({
+      email,
+      nome,
+      equipe,
+      role: (email.toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()) ? "diretor" : role,
+      aprovado: (email.toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()),
+      aprovadoEm: (email.toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()) ? nowMs() : null,
+      aprovadoPor: (email.toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()) ? "MASTER" : null,
+
+      ativo: false,
+      ativoAtualizadoEm: nowMs(),
+      mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
+      emailRelatorio: "",
+      criadoEm: nowMs()
+    });
+
+    alert("Acesso criado! Agora aguarde aprovação do Diretor/Gestor.");
+  }catch(e){
+    // se já existe
+    if(String(e.code||"").includes("email-already-in-use")){
+      alert("Este email já existe. Se estiver pendente, aguarde aprovação.");
+    }else{
+      alert(e.message || e.code);
     }
   }
-});
+};
 
-function mostrarLogin() {
-  app.innerHTML = `
-    <h2>PROEFI</h2>
-    <input id="email" placeholder="Email"><br><br>
-    <input id="senha" type="password" placeholder="Senha"><br><br>
-    <button onclick="login()">Entrar</button>
+function renderPendingApproval(){
+  $("app").innerHTML = `
+    ${renderBrand()}
+    <div class="card">
+      <div class="danger">Acesso PENDENTE.</div>
+      <div class="small muted">Aguarde aprovação do Diretor/Gestor.</div>
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="logout()">SAIR</button>
+    </div>
   `;
 }
 
-function login() {
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
-
-  auth.signInWithEmailAndPassword(email, senha)
-    .catch(e => alert(e.message));
-}
-
-function logout() {
-  auth.signOut();
-}
-
-function mostrarGerente(email) {
-  app.innerHTML = `
-    <h2>PROEFI - GERENTE</h2>
-    <p>${email}</p>
-    <button onclick="logout()">Sair</button>
+function renderUnauthorized(msg){
+  $("app").innerHTML = `
+    ${renderBrand()}
+    <div class="card">
+      <div class="danger">${msg || "Usuário não autorizado."}</div>
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="logout()">SAIR</button>
+    </div>
   `;
 }
 
-function mostrarCorretor(email) {
-  app.innerHTML = `
-    <h2>PROEFI - CORRETOR</h2>
-    <p>${email}</p>
-    <button onclick="pegarLead()">PEGAR PRÓXIMO LEAD</button>
-    <div id="leadAtual"></div>
-    <button onclick="logout()">Sair</button>
+window.logout = async function(){ await auth.signOut(); };
+
+/** =========================
+ *  LEADS: upload/import
+ *  ========================= */
+function parseSheetRows(workbook){
+  const sheetName = workbook.SheetNames[0];
+  const ws = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+  const clean = rows.filter(r => r && r.some(cell => String(cell).trim() !== ""));
+  return clean;
+}
+function detectHeaderRow(rows){
+  const keys = ["nome","telefone","celular","contato","email","e-mail"];
+  for(let i=0;i<Math.min(5, rows.length);i++){
+    const row = rows[i].map(c=>String(c).toLowerCase().trim());
+    const hit = row.some(c => keys.includes(c));
+    if(hit) return i;
+  }
+  return 0;
+}
+function mapLeadColumns(row){
+  const nome = String(row[0] || "").trim();
+  const telefone = String(row[1] || "").trim();
+  const email = String(row[2] || "").trim();
+  return { nome, telefone, email };
+}
+function makeLeadDoc(base){
+  return {
+    nome: base.nome || "",
+    telefone: base.telefone || "",
+    email: base.email || "",
+    status: "fila",              // fila | em_atendimento | finalizado
+    corretorId: null,
+    corretorEmail: null,
+    equipe: null,
+    origem: null,                // geral | gerente | corretor
+    donoUpload: null,
+    listaRef: null,
+
+    criadoEm: nowMs(),
+    atualizadoEm: nowMs(),
+
+    emAtendimentoEm: null,
+    timestampDistribuicao: null,
+    timestampFinalizacao: null,
+
+    atendeu: null,
+    resultado: null,             // AGENDAMENTO | PROMESSA DOCUMENTAÇÃO | NÃO GEROU INTERESSE
+    observacao: null,
+    dataAgendada: null,
+
+    totalTentativas: 0,
+    tentativasPorCorretor: {},   // {uid: n} para evitar repetição (geral)
+  };
+}
+
+async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distribuirGeralAgora }){
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  const rows = parseSheetRows(workbook);
+  if(rows.length === 0) throw new Error("Planilha vazia.");
+
+  const headerIndex = detectHeaderRow(rows);
+  const dataRows = rows.slice(headerIndex + 1);
+
+  const parsed = [];
+  for(const r of dataRows){
+    const lead = mapLeadColumns(r);
+    if(!lead.nome && !lead.telefone && !lead.email) continue;
+    if(!lead.telefone) continue;
+    parsed.push(lead);
+  }
+  if(parsed.length === 0) throw new Error("Nenhum lead válido (verifique colunas A/B/C).");
+
+  const listaDoc = await db.collection("listas").add({
+    origem,
+    equipe: equipe || null,
+    donoUpload: donoUploadUid,
+    arquivoNome: file.name,
+    total: parsed.length,
+    criadoEm: nowMs()
+  });
+  const listaRefId = listaDoc.id;
+
+  let corretoresAtivos = [];
+  if(origem === "geral" && distribuirGeralAgora){
+    const snap = await db.collection("users")
+      .where("role","==","corretor")
+      .where("aprovado","==",true)
+      .where("ativo","==",true)
+      .get();
+    corretoresAtivos = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    if(corretoresAtivos.length === 0){
+      throw new Error("Nenhum corretor ATIVO agora. Peça para clicarem 'ESTOU ATIVO' antes do upload geral.");
+    }
+  }
+
+  const batchSize = 350;
+  let idx = 0;
+  while(idx < parsed.length){
+    const batch = db.batch();
+    const slice = parsed.slice(idx, idx + batchSize);
+    for(const leadBase of slice){
+      const docRef = db.collection("leads").doc();
+      const doc = makeLeadDoc(leadBase);
+
+      doc.origem = origem;
+      doc.equipe = equipe || null;
+      doc.donoUpload = donoUploadUid;
+      doc.listaRef = listaRefId;
+
+      if(origem === "geral" && distribuirGeralAgora){
+        const chosen = corretoresAtivos[Math.floor(Math.random() * corretoresAtivos.length)];
+        doc.corretorId = chosen.uid;
+        doc.corretorEmail = chosen.email || null;
+        doc.status = "fila";
+      }
+
+      batch.set(docRef, doc);
+    }
+    await batch.commit();
+    idx += batchSize;
+  }
+
+  return { total: parsed.length, listaRefId };
+}
+
+/** =========================
+ *  Corretor ACTIVE/PAUSE
+ *  ========================= */
+async function setActiveStatus(uid, ativo){
+  await db.collection("users").doc(uid).update({
+    ativo: !!ativo,
+    ativoAtualizadoEm: nowMs()
+  });
+}
+function activeBadge(ativo){
+  if(ativo) return `<span class="pill">ATIVO</span>`;
+  return `<span class="pill" style="background:rgba(255,204,203,0.7)">PAUSADO</span>`;
+}
+
+/** =========================
+ *  Lead picking (avoid repeat)
+ *  ========================= */
+async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equipeCorretor }){
+  // Observação: Firestore não tem "not-in map", então usamos lógica:
+  // - Geral: leads já pré-atribuídos ao corretor (corretorId==uid)
+  //   e evitamos repetir o mesmo devolvido imediatamente: usamos tentativasPorCorretor
+  // - Gerente: equipe e corretorId null (atribui ao pegar)
+  // - Minha: donoUpload==uid e corretorId null (atribui ao pegar)
+
+  let q = db.collection("leads").where("status","==","fila");
+
+  if(source === "geral"){
+    q = q.where("origem","==","geral").where("corretorId","==",corretorUid);
+  }else if(source === "gerente"){
+    q = q.where("origem","==","gerente").where("equipe","==",equipeCorretor).where("corretorId","==",null);
+  }else{
+    q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
+  }
+
+  // pega um lote e escolhe um que não foi tentado "agora"
+  const snap = await q.limit(25).get();
+  if(snap.empty) return null;
+
+  let chosenDoc = null;
+  for(const ds of snap.docs){
+    const d = ds.data();
+    const tried = (d.tentativasPorCorretor && d.tentativasPorCorretor[corretorUid]) ? d.tentativasPorCorretor[corretorUid] : 0;
+    // permite no máximo 2 tentativas no mesmo dia por corretor (evita loop)
+    const lastTryDay = d._lastTryDayByCorretor && d._lastTryDayByCorretor[corretorUid] ? d._lastTryDayByCorretor[corretorUid] : null;
+    const today = dayKey(nowMs());
+    if(lastTryDay === today && tried >= 2) continue;
+    chosenDoc = ds;
+    break;
+  }
+  // se todos travaram, pega o primeiro mesmo
+  if(!chosenDoc) chosenDoc = snap.docs[0];
+
+  const ref = chosenDoc.ref;
+  const data = chosenDoc.data();
+
+  // transação simples: marca como em_atendimento
+  await ref.update({
+    status: "em_atendimento",
+    corretorId: corretorUid,
+    corretorEmail: corretorEmail || null,
+    equipe: data.equipe || equipeCorretor || null,
+    emAtendimentoEm: nowMs(),
+    timestampDistribuicao: nowMs(),
+    atualizadoEm: nowMs(),
+    totalTentativas: firebase.firestore.FieldValue.increment(1),
+    [`tentativasPorCorretor.${corretorUid}`]: firebase.firestore.FieldValue.increment(1),
+    [`_lastTryDayByCorretor.${corretorUid}`]: dayKey(nowMs())
+  });
+
+  const fresh = await ref.get();
+  return { ref, data: fresh.data() };
+}
+
+/** =========================
+ *  APPROVAL (Diretor/Gerente)
+ *  ========================= */
+async function listPendingUsers(scopeUser){
+  // Diretor master vê todos pendentes
+  // Diretor normal vê todos pendentes
+  // Gerente vê pendentes da sua equipe (se quiser) - aqui liberamos para gerente aprovar também
+  const myRole = scopeUser.role;
+  const myEquipe = scopeUser.equipe || "equipe1";
+  let q = db.collection("users").where("aprovado","==",false);
+
+  if(myRole === "gerente"){
+    q = q.where("equipe","==",myEquipe);
+  }
+  const snap = await q.get();
+  return snap.docs.map(d => ({ uid:d.id, ...d.data() }));
+}
+
+async function approveUser(uid, approver){
+  await db.collection("users").doc(uid).update({
+    aprovado: true,
+    aprovadoEm: nowMs(),
+    aprovadoPor: approver.email || "aprovador"
+  });
+}
+async function denyUser(uid){
+  // mantém no banco como negado (não apagamos auth)
+  await db.collection("users").doc(uid).update({
+    aprovado: false,
+    negado: true,
+    negadoEm: nowMs()
+  });
+}
+
+/** =========================
+ *  REPORTS / TOP5 utilities
+ *  ========================= */
+function rangeToTs(dateStr, end=false){
+  // dateStr: YYYY-MM-DD
+  const [y,m,d] = dateStr.split("-").map(n=>parseInt(n,10));
+  if(!end){
+    return new Date(y, m-1, d, 0,0,0,0).getTime();
+  }
+  return new Date(y, m-1, d, 23,59,59,999).getTime();
+}
+
+async function fetchLeadsForPeriod({ scope, myUser, de, ate }){
+  const startTs = rangeToTs(de, false);
+  const endTs   = rangeToTs(ate, true);
+
+  // Buscamos por timestampFinalizacao para atendidos e timestampDistribuicao para tentativas
+  // Para não explodir, fazemos 2 consultas (finalizados e tentativas) e depois agregamos.
+
+  let base = db.collection("leads");
+
+  // finalizados
+  let qFinal = base.where("status","==","finalizado")
+    .where("timestampFinalizacao", ">=", startTs)
+    .where("timestampFinalizacao", "<=", endTs);
+
+  // tentativas (inclui não-atendeu)
+  let qTry = base.where("timestampDistribuicao", ">=", startTs)
+    .where("timestampDistribuicao", "<=", endTs);
+
+  if(scope === "corretor"){
+    qFinal = qFinal.where("corretorId","==",myUser.uid);
+    qTry   = qTry.where("corretorId","==",myUser.uid);
+  }else if(scope === "gerente"){
+    const equipe = myUser.equipe || "equipe1";
+    qFinal = qFinal.where("equipe","==",equipe);
+    qTry   = qTry.where("equipe","==",equipe);
+  }else{
+    // diretor vê tudo
+  }
+
+  const [finalSnap, trySnap] = await Promise.all([qFinal.get(), qTry.get()]);
+  const finals = finalSnap.docs.map(d=>({id:d.id, ...d.data()}));
+  const tries  = trySnap.docs.map(d=>({id:d.id, ...d.data()}));
+  return { finals, tries, startTs, endTs };
+}
+
+function computeScoreboard({ finals, tries }){
+  // soma por corretor
+  const byCorretor = {};
+  for(const t of tries){
+    const cid = t.corretorId || "SEM";
+    if(!byCorretor[cid]) byCorretor[cid] = { corretorId: cid, corretorEmail: t.corretorEmail||"", tentativas:0, naoAtendeu:0, atendidos:0, ag:0, pr:0, si:0, pontos:0 };
+    byCorretor[cid].tentativas += 1;
+    if(t.atendeu === false) byCorretor[cid].naoAtendeu += 1;
+  }
+  for(const f of finals){
+    const cid = f.corretorId || "SEM";
+    if(!byCorretor[cid]) byCorretor[cid] = { corretorId: cid, corretorEmail: f.corretorEmail||"", tentativas:0, naoAtendeu:0, atendidos:0, ag:0, pr:0, si:0, pontos:0 };
+    byCorretor[cid].atendidos += 1;
+    if(f.resultado === "AGENDAMENTO"){ byCorretor[cid].ag += 1; byCorretor[cid].pontos += 10; }
+    else if(f.resultado === "PROMESSA DOCUMENTAÇÃO"){ byCorretor[cid].pr += 1; byCorretor[cid].pontos += 6; }
+    else { byCorretor[cid].si += 1; byCorretor[cid].pontos += 1; }
+  }
+
+  const list = Object.values(byCorretor).filter(x=>x.corretorId!=="SEM");
+  list.sort((a,b)=> (b.pontos - a.pontos) || (b.ag - a.ag) || (b.pr - a.pr) || (b.atendidos - a.atendidos));
+  return list;
+}
+
+async function fetchUsersMapByIds(ids){
+  const uniq = Array.from(new Set(ids.filter(Boolean)));
+  const chunks = [];
+  while(uniq.length) chunks.push(uniq.splice(0, 10));
+
+  const map = {};
+  for(const c of chunks){
+    const snap = await db.collection("users").where(firebase.firestore.FieldPath.documentId(),"in",c).get();
+    snap.forEach(d=>{ map[d.id] = d.data(); });
+  }
+  return map;
+}
+
+/** =========================
+ *  SHELL RENDER
+ *  ========================= */
+async function renderAppShell(){
+  const user = cachedAuthUser;
+  const ud = cachedUserData;
+  if(!user || !ud) return;
+
+  // enforce master director
+  const emailLower = (user.email||"").toLowerCase();
+  if(emailLower === MASTER_DIRECTOR_EMAIL.toLowerCase() && ud.role !== "diretor"){
+    await db.collection("users").doc(user.uid).update({ role:"diretor", aprovado:true });
+    cachedUserData.role = "diretor";
+  }
+
+  const role = ud.role || "corretor";
+  const extra = (role==="corretor") ? activeBadge(!!ud.ativo) :
+                (role==="gerente") ? `<span class="pill">Equipe: ${safe(ud.equipe||"equipe1")}</span>` :
+                `<span class="pill">DIRETORIA</span>`;
+
+  let html = `${renderHeader(role, user.email, `<div>${extra}</div>`)}`;
+
+  // Conteúdo por tab
+  if(currentTab === "painel") html += await renderPainel(role, user, ud);
+  else if(currentTab === "atendimento") html += await renderAtendimento(role, user, ud);
+  else if(currentTab === "minicrm") html += await renderMiniCRM(role, user, ud);
+  else if(currentTab === "resultados") html += await renderResultados(role, user, ud);
+  else if(currentTab === "config") html += await renderConfig(role, user, ud);
+  else if(currentTab === "aprovacao") html += await renderAprovacao(role, user, ud);
+  else html += `<div class="card">Aba inválida</div>`;
+
+  html += renderTabsForRole(role);
+
+  $("app").innerHTML = html;
+
+  // pequenos defaults de data
+  try{
+    const de = $("repDe"); const ate = $("repAte");
+    if(de && !de.value) de.value = toISODateInput(nowMs());
+    if(ate && !ate.value) ate.value = toISODateInput(nowMs());
+  }catch(e){}
+}
+
+/** =========================
+ *  TAB: PAINEL
+ *  ========================= */
+async function renderPainel(role, user, ud){
+  if(role === "corretor"){
+    const ativo = !!ud.ativo;
+    const disable = ativo ? "" : "";
+    return `
+      <div class="card">
+        <div class="row">
+          <div class="grow">
+            <div><b>Status do Operador</b></div>
+            <div class="small muted">Quando PAUSADO, você não atende nem avança leads.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <button class="btn btnGreen ${ativo ? "btnDisabled":""}" ${ativo ? "disabled":""} onclick="setMeActive(true)">🟢 ESTOU ATIVO</button>
+          <button class="btn btnRed ${!ativo ? "btnDisabled":""}" ${!ativo ? "disabled":""} onclick="setMeActive(false)">🔴 PAUSAR</button>
+        </div>
+        <div class="divider"></div>
+        <div class="small muted">
+          Equipe: <b>${safe(ud.equipe||"equipe1")}</b>
+        </div>
+      </div>
+
+      <div class="card">
+        <div><b>Top 5 (Equipe e Empresa)</b></div>
+        <div class="small muted">Atualize para ver novamente.</div>
+        <div class="divider"></div>
+        <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
+        <div id="top5Box" style="margin-top:12px"></div>
+      </div>
+    `;
+  }
+
+  if(role === "gerente"){
+    return `
+      <div class="card">
+        <div><b>Painel do Gerente</b></div>
+        <div class="small muted">Foco total em produtividade (sem atendimento).</div>
+        <div class="divider"></div>
+        <div class="small muted">Equipe: <b>${safe(ud.equipe||"equipe1")}</b></div>
+      </div>
+
+      <div class="card">
+        <div><b>Top 5 (Equipe e Empresa)</b></div>
+        <div class="divider"></div>
+        <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
+        <div id="top5Box" style="margin-top:12px"></div>
+      </div>
+    `;
+  }
+
+  // diretor
+  return `
+    <div class="card">
+      <div><b>Painel do Diretor</b></div>
+      <div class="small muted">Você vê a operação completa e aprova acessos.</div>
+    </div>
+
+    <div class="card">
+      <div><b>Top 5 (Empresa)</b></div>
+      <div class="divider"></div>
+      <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
+      <div id="top5Box" style="margin-top:12px"></div>
+    </div>
   `;
 }
 
-window.pegarLead = async function () {
-  const snapshot = await db.collection("leads")
-    .where("status", "==", "fila")
-    .limit(1)
-    .get();
+window.setMeActive = async function(ativo){
+  const user = auth.currentUser;
+  await setActiveStatus(user.uid, ativo);
+  cachedUserData = await getUserDoc(user.uid);
+  // se estava em atendimento e pausou, bloqueia ações mas mantém o lead até finalizar em ativo
+  await renderAppShell();
+};
 
-  if (snapshot.empty) {
-    alert("SEM LEADS DISPONÍVEIS");
+/** =========================
+ *  TAB: ATENDIMENTO (só corretor)
+ *  ========================= */
+async function renderAtendimento(role, user, ud){
+  if(role !== "corretor"){
+    return `<div class="card"><b>Sem acesso.</b></div>`;
+  }
+
+  const ativo = !!ud.ativo;
+  const disabled = ativo ? "" : "btnDisabled";
+  const disabledAttr = ativo ? "" : "disabled";
+
+  return `
+    <div class="card">
+      <div><b>Fonte de Leads</b></div>
+      <div class="small muted">Escolha a lista para bater agora.</div>
+      <div class="divider"></div>
+
+      <select id="leadSource" ${disabledAttr}>
+        <option value="geral">Lista Geral (Diretoria)</option>
+        <option value="gerente">Lista do Gerente (Equipe)</option>
+        <option value="minha">Minha Lista (Corretor)</option>
+      </select>
+
+      <div class="divider"></div>
+
+      <button class="btn btnGold ${disabled}" ${disabledAttr} onclick="pegarProximoLead()">PEGAR PRÓXIMO LEAD</button>
+
+      <div class="divider"></div>
+      <div class="small muted">
+        Dica: se estiver PAUSADO, não atende nem avança lead.
+      </div>
+    </div>
+
+    <div class="card" id="leadArea">
+      <div class="center muted">Nenhum lead em atendimento.</div>
+    </div>
+  `;
+}
+
+window.pegarProximoLead = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(!me.ativo) return alert("Você está PAUSADO. Clique em ESTOU ATIVO primeiro.");
+  if(leadAtualRef) return alert("Você já está com um lead em atendimento. Finalize antes.");
+
+  const source = $("leadSource").value;
+  const equipe = me.equipe || "equipe1";
+
+  const picked = await pickNextLeadForCorretor({
+    source,
+    corretorUid: user.uid,
+    corretorEmail: user.email,
+    equipeCorretor: equipe
+  });
+
+  if(!picked){
+    alert("Sem leads disponíveis nessa fonte.");
     return;
   }
 
-  const doc = snapshot.docs[0];
-  const leadRef = db.collection("leads").doc(doc.id);
+  leadAtualRef = picked.ref;
+  leadAtualData = picked.data;
+  detailsOpen = false;
 
-  await leadRef.update({
-    status: "em_atendimento",
-    corretorId: auth.currentUser.uid,
-    timestampDistribuicao: Date.now()
-  });
-
-  mostrarLead(doc.id, doc.data());
+  await renderLeadInArea();
 };
 
-function mostrarLead(id, data) {
-  const div = document.getElementById("leadAtual");
+async function renderLeadInArea(){
+  const lead = leadAtualData;
+  const area = $("leadArea");
 
-  div.innerHTML = `
-    <h3>${data.nome}</h3>
-    <p>Telefone: ${data.telefone}</p>
-    <p>Email: ${data.email}</p>
-    <p id="contador"></p>
-    <button onclick="finalizarLead('${id}', 'atendeu')">ATENDEU</button>
-    <button onclick="finalizarLead('${id}', 'nao_atendeu')">NÃO ATENDEU</button>
+  const user = auth.currentUser;
+  const snap = await db.collection("users").doc(user.uid).get();
+  const userAtual = snap.exists ? (snap.data() || {}) : {};
+  const isAtivo = !!userAtual.ativo;
+
+  const telClean = cleanPhone(lead.telefone);
+  const msgBase  = userAtual.mensagemPadrao || "";
+  const msgFinal = encodeURIComponent(templateMessage(msgBase, lead));
+
+  const emailTo = encodeURIComponent(lead.email || "");
+  const mailSubject = encodeURIComponent("PROEFI - ALVENA");
+  const mailBody = msgFinal;
+
+  area.innerHTML = `
+    <div class="row">
+      <div class="grow">
+        <div style="font-size:18px"><b>${safe(lead.nome || "Sem nome")}</b></div>
+        <div class="small muted">${safe(lead.telefone)} • ${safe(lead.email)}</div>
+      </div>
+      <div>
+        <span class="pill">${isAtivo ? "ATIVO" : "PAUSADO"}</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="grid3">
+      <a href="tel:${telClean}">
+        <button class="btn btnBlue ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""}>📞 LIGAR</button>
+      </a>
+
+      <a href="sms:${telClean}?body=${msgFinal}">
+        <button class="btn btnBlue ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""}>📩 SMS</button>
+      </a>
+
+      <a href="mailto:${emailTo}?subject=${mailSubject}&body=${mailBody}">
+        <button class="btn btnBlue ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""}>📧 EMAIL</button>
+      </a>
+    </div>
+
+    <a href="https://wa.me/55${telClean}?text=${msgFinal}" target="_blank">
+      <button class="btn btnBlue ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""} style="margin-top:10px">💬 WHATSAPP</button>
+    </a>
+
+    <div class="divider"></div>
+
+    <div class="grid2">
+      <button class="btn btnGreen ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""} onclick="uiAtendeu()">ATENDEU</button>
+      <button class="btn btnRed ${!isAtivo?"btnDisabled":""}" ${!isAtivo?"disabled":""} onclick="uiNaoAtendeu()">NÃO ATENDEU</button>
+    </div>
+
+    <div id="atendeuBox"></div>
+  `;
+}
+
+window.uiNaoAtendeu = async function(){
+  if(!leadAtualRef) return;
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(!me.ativo) return alert("Você está PAUSADO. Não pode avançar lead.");
+
+  // devolve para fila, porém evita repetir imediatamente:
+  // adicionamos tentativasPorCorretor e mantemos corretorId se origem geral
+  const ok = await openModal("Confirmar", "Marcar como NÃO ATENDEU e devolver para fila?");
+  if(!ok) return;
+
+  await leadAtualRef.update({
+    status: "fila",
+    // geral continua atribuído ao mesmo corretor (pra não ligar duplicado por outro)
+    corretorId: (leadAtualData.origem === "geral") ? user.uid : null,
+    corretorEmail: (leadAtualData.origem === "geral") ? user.email : null,
+    emAtendimentoEm: null,
+    timestampFinalizacao: null,
+    atendeu: false,
+    resultado: null,
+    observacao: null,
+    dataAgendada: null,
+    atualizadoEm: nowMs()
+  });
+
+  leadAtualRef = null;
+  leadAtualData = null;
+  detailsOpen = false;
+
+  $("leadArea").innerHTML = `<div class="center muted">Lead devolvido para a fila. Pegando outro...</div>`;
+
+  // pega outro automaticamente
+  try{
+    await pegarProximoLead();
+  }catch(e){
+    // se não tiver, só mostra
+    $("leadArea").innerHTML = `<div class="center muted">Sem novo lead disponível agora.</div>`;
+  }
+};
+
+window.uiAtendeu = function(){
+  if(!leadAtualRef) return;
+  if(detailsOpen) return;
+  detailsOpen = true;
+
+  $("atendeuBox").innerHTML = `
+    <div class="divider"></div>
+
+    <div class="collapseHeader" onclick="toggleCollapse('cAg')">
+      <span>📅 AGENDAMENTO</span>
+      <span class="muted">abrir/fechar</span>
+    </div>
+    <div class="collapseBody" id="cAg">
+      <div class="fieldLabel">Data e horário (obrigatório)</div>
+      <div class="grid2">
+        <input type="date" id="agData" />
+        <input type="time" id="agHora" />
+      </div>
+      <div class="fieldLabel">Observações (opcional)</div>
+      <textarea id="obsAg" placeholder="Ex: cliente quer 2q..."></textarea>
+      <button class="btn btnGreen" onclick="confirmarAtendeu('AGENDAMENTO')">CONFIRMAR AGENDAMENTO</button>
+    </div>
+
+    <div style="height:10px"></div>
+
+    <div class="collapseHeader" onclick="toggleCollapse('cPr')">
+      <span>📌 PROMESSA DE DOCUMENTAÇÃO</span>
+      <span class="muted">abrir/fechar</span>
+    </div>
+    <div class="collapseBody" id="cPr">
+      <div class="fieldLabel">Observações (opcional)</div>
+      <textarea id="obsPr" placeholder="Ex: vai enviar docs amanhã..."></textarea>
+      <button class="btn btnGreen" onclick="confirmarAtendeu('PROMESSA DOCUMENTAÇÃO')">CONFIRMAR PROMESSA</button>
+    </div>
+
+    <div style="height:10px"></div>
+
+    <div class="collapseHeader" onclick="toggleCollapse('cSi')">
+      <span>⛔ NÃO GEROU INTERESSE</span>
+      <span class="muted">abrir/fechar</span>
+    </div>
+    <div class="collapseBody" id="cSi">
+      <div class="fieldLabel">Feedback (obrigatório)</div>
+      <textarea id="fb" placeholder="Motivo / objeção / próximo passo..."></textarea>
+      <button class="btn btnGreen" onclick="confirmarAtendeu('NÃO GEROU INTERESSE')">CONFIRMAR</button>
+    </div>
+  `;
+};
+
+window.toggleCollapse = function(id){
+  const el = $(id);
+  const open = el.classList.contains("open");
+  // fecha todos
+  ["cAg","cPr","cSi"].forEach(x=>{
+    const e = $(x); if(e) e.classList.remove("open");
+  });
+  if(!open) el.classList.add("open");
+};
+
+window.confirmarAtendeu = async function(resultado){
+  if(!leadAtualRef) return;
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(!me.ativo) return alert("Você está PAUSADO. Não pode finalizar.");
+
+  let dataAgendada = null;
+  let obs = null;
+
+  if(resultado === "AGENDAMENTO"){
+    const d = $("agData").value;
+    const h = $("agHora").value;
+    if(!d || !h) return alert("Preencha data e horário do agendamento.");
+    dataAgendada = `${d} ${h}`;
+    obs = ($("obsAg").value || "").trim();
+  }else if(resultado === "PROMESSA DOCUMENTAÇÃO"){
+    obs = ($("obsPr").value || "").trim();
+  }else{
+    const fb = ($("fb").value || "").trim();
+    if(!fb) return alert("Feedback é obrigatório.");
+    obs = fb;
+  }
+
+  const ok = await openModal("Confirmar", `Finalizar como: ${resultado}?`);
+  if(!ok) return;
+
+  await leadAtualRef.update({
+    status: "finalizado",
+    atendeu: true,
+    resultado,
+    observacao: obs || null,
+    dataAgendada: dataAgendada,
+    timestampFinalizacao: nowMs(),
+    atualizadoEm: nowMs()
+  });
+
+  // gamificação
+  if(resultado === "AGENDAMENTO" || resultado === "PROMESSA DOCUMENTAÇÃO"){
+    beepCash();
+  }
+
+  leadAtualRef = null;
+  leadAtualData = null;
+  detailsOpen = false;
+  $("leadArea").innerHTML = `<div class="center ok">Atendimento finalizado! Pegue o próximo.</div>`;
+};
+
+/** =========================
+ *  TAB: MINI CRM
+ *  ========================= */
+async function renderMiniCRM(role, user, ud){
+  // gerente: nome, contato, ag/pr e corretor
+  // diretor: só ag/pr e corretor (sem nome/contato)
+  // corretor: seus ag/pr do dia (com nome/contato)
+  return `
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div><b>Mini CRM</b></div>
+          <div class="small muted">Resumo focado em Agendamentos e Promessas.</div>
+        </div>
+        <button class="btn btnGold" style="max-width:220px" onclick="loadMiniCRM()">ATUALIZAR</button>
+      </div>
+      <div class="divider"></div>
+      <div id="miniCrmBox" class="muted">Clique em ATUALIZAR.</div>
+    </div>
+  `;
+}
+
+window.loadMiniCRM = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const role = me.role;
+
+  // pega últimos 200 finalizados (filtra local)
+  let q = db.collection("leads")
+    .where("status","==","finalizado")
+    .orderBy("timestampFinalizacao","desc")
+    .limit(200);
+
+  if(role === "corretor"){
+    q = q.where("corretorId","==",user.uid);
+  }else if(role === "gerente"){
+    q = q.where("equipe","==",(me.equipe||"equipe1"));
+  }else{
+    // diretor: tudo
+  }
+
+  const snap = await q.get();
+  const list = snap.docs.map(d=>({id:d.id, ...d.data()}))
+    .filter(x => x.resultado === "AGENDAMENTO" || x.resultado === "PROMESSA DOCUMENTAÇÃO");
+
+  const ids = list.map(x=>x.corretorId);
+  const usersMap = await fetchUsersMapByIds(ids);
+
+  const box = $("miniCrmBox");
+  if(list.length === 0){
+    box.innerHTML = `<div class="muted">Sem registros.</div>`;
+    return;
+  }
+
+  const items = list.slice(0, 60).map(l=>{
+    const u = usersMap[l.corretorId] || {};
+    const who = safe(u.nome || l.corretorEmail || l.corretorId);
+    const tagClass = (l.resultado==="AGENDAMENTO") ? "tagAg" : "tagPr";
+    const tag = (l.resultado==="AGENDAMENTO") ? "AGENDAMENTO" : "PROMESSA";
+
+    if(role === "diretor"){
+      return `
+        <div class="item">
+          <div class="itemTop">
+            <span class="tag ${tagClass}">${tag}</span>
+            <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
+          </div>
+          <div style="margin-top:8px"><b>Corretor:</b> ${who}</div>
+        </div>
+      `;
+    }
+
+    if(role === "gerente"){
+      return `
+        <div class="item">
+          <div class="itemTop">
+            <span class="tag ${tagClass}">${tag}</span>
+            <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
+          </div>
+          <div style="margin-top:8px"><b>${safe(l.nome||"")}</b></div>
+          <div class="small muted">${safe(l.telefone||"")}</div>
+          <div style="margin-top:6px"><b>Corretor:</b> ${who}</div>
+        </div>
+      `;
+    }
+
+    // corretor
+    return `
+      <div class="item">
+        <div class="itemTop">
+          <span class="tag ${tagClass}">${tag}</span>
+          <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
+        </div>
+        <div style="margin-top:8px"><b>${safe(l.nome||"")}</b></div>
+        <div class="small muted">${safe(l.telefone||"")} • ${safe(l.email||"")}</div>
+        <div class="small muted" style="margin-top:6px">${safe(l.observacao||"")}</div>
+      </div>
+    `;
+  }).join("");
+
+  box.innerHTML = `<div class="list">${items}</div>`;
+};
+
+/** =========================
+ *  TAB: RESULTADOS
+ *  ========================= */
+async function renderResultados(role, user, ud){
+  return `
+    <div class="card">
+      <div><b>Relatórios e Rankings</b></div>
+      <div class="small muted">Escolha período (DE/ATÉ) e gere Excel + Top 5.</div>
+      <div class="divider"></div>
+
+      <div class="grid2">
+        <div>
+          <div class="fieldLabel">DE</div>
+          <input type="date" id="repDe" />
+        </div>
+        <div>
+          <div class="fieldLabel">ATÉ</div>
+          <input type="date" id="repAte" />
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="grid2">
+        <button class="btn btnGold" onclick="gerarRelatorioExcelPeriodo()">📊 GERAR EXCEL</button>
+        <button class="btn btnBlue" onclick="loadTop5()">🏆 TOP 5</button>
+      </div>
+
+      <div class="divider"></div>
+      <div id="resultsBox" class="muted">Selecione período e gere.</div>
+    </div>
+  `;
+}
+
+window.gerarRelatorioExcelPeriodo = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const role = me.role;
+
+  const de = $("repDe").value || toISODateInput(nowMs());
+  const ate = $("repAte").value || toISODateInput(nowMs());
+
+  const scope = (role==="corretor") ? "corretor" : (role==="gerente") ? "gerente" : "diretor";
+  const { finals, tries } = await fetchLeadsForPeriod({ scope, myUser: {uid:user.uid, equipe: me.equipe}, de, ate });
+
+  // scoreboard
+  const sb = computeScoreboard({ finals, tries });
+
+  // resumo geral
+  const totalTentativas = tries.length;
+  const totalAtendidos = finals.length;
+  const totalAg = finals.filter(x=>x.resultado==="AGENDAMENTO").length;
+  const totalPr = finals.filter(x=>x.resultado==="PROMESSA DOCUMENTAÇÃO").length;
+  const totalSi = finals.filter(x=>x.resultado==="NÃO GEROU INTERESSE").length;
+
+  // planilha 1: resumo
+  const resumo = [
+    ["PROEFI - ALVENA", ""],
+    ["Perfil", role.toUpperCase()],
+    ["Email", user.email],
+    ["Equipe", me.equipe || ""],
+    ["Período", `${de} até ${ate}`],
+    ["", ""],
+    ["Total tentativas", totalTentativas],
+    ["Total atendidos", totalAtendidos],
+    ["Agendamentos", totalAg],
+    ["Promessas", totalPr],
+    ["Não gerou interesse", totalSi],
+  ];
+
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+
+  // planilha 2: ranking
+  const rankRows = sb.map((r, i)=>({
+    Rank: i+1,
+    Corretor: r.corretorEmail || r.corretorId,
+    Tentativas: r.tentativas,
+    Atendidos: r.atendidos,
+    Agendamentos: r.ag,
+    Promessas: r.pr,
+    "Sem interesse": r.si,
+    Pontos: r.pontos
+  }));
+  const wsRank = XLSX.utils.json_to_sheet(rankRows);
+
+  // planilha 3: atendidos detalhado (apenas finalizados)
+  const detRows = finals.map(f=>{
+    const tempoMin = (f.timestampFinalizacao && f.timestampDistribuicao)
+      ? timeMin(f.timestampFinalizacao - f.timestampDistribuicao) : "";
+    return {
+      Data: f.timestampFinalizacao ? new Date(f.timestampFinalizacao).toLocaleString() : "",
+      Cliente: f.nome || "",
+      Telefone: f.telefone || "",
+      Email: f.email || "",
+      Resultado: f.resultado || "",
+      "Data/Hora Agendada": f.dataAgendada || "",
+      Feedback: f.observacao || "",
+      "Tempo Atendimento (min)": tempoMin,
+      Corretor: f.corretorEmail || ""
+    };
+  });
+  const wsDet = XLSX.utils.json_to_sheet(detRows);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+  XLSX.utils.book_append_sheet(wb, wsRank, "Ranking");
+  XLSX.utils.book_append_sheet(wb, wsDet, "Atendidos");
+
+  XLSX.writeFile(wb, `PROEFI_RELATORIO_${role.toUpperCase()}_${de}_ATE_${ate}.xlsx`);
+
+  $("resultsBox").innerHTML = `
+    <div class="ok">Excel gerado com sucesso!</div>
+    <div class="small muted">Arquivo baixado no dispositivo.</div>
+  `;
+};
+
+window.loadTop5 = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const role = me.role;
+
+  const today = toISODateInput(nowMs());
+  const { finals, tries } = await fetchLeadsForPeriod({
+    scope: (role==="corretor") ? "corretor" : (role==="gerente") ? "gerente" : "diretor",
+    myUser: { uid:user.uid, equipe: me.equipe },
+    de: today, ate: today
+  });
+
+  const sbAll = computeScoreboard({ finals, tries });
+  const topEmpresa = sbAll.slice(0,5);
+
+  // equipe: se corretor/gerente usa equipe, diretor também pode ver equipe escolhida (aqui usamos equipe do diretor se houver)
+  const equipe = me.equipe || "equipe1";
+  const finalsEq = finals.filter(x=> (x.equipe||"")==equipe);
+  const triesEq  = tries.filter(x=> (x.equipe||"")==equipe);
+  const sbEq = computeScoreboard({ finals: finalsEq, tries: triesEq }).slice(0,5);
+
+  const box = $("top5Box") || $("resultsBox");
+  if(!box) return;
+
+  const renderList = (arr)=> arr.length ? `
+    <div class="tableWrap" style="margin-top:10px">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Corretor</th><th>Pontos</th><th>Ag</th><th>Pr</th><th>Atendidos</th><th>Tentativas</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${arr.map((r,i)=>`
+            <tr>
+              <td><b>${i+1}</b></td>
+              <td>${safe(r.corretorEmail || r.corretorId)}</td>
+              <td><b>${r.pontos}</b></td>
+              <td>${r.ag}</td>
+              <td>${r.pr}</td>
+              <td>${r.atendidos}</td>
+              <td>${r.tentativas}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  ` : `<div class="muted">Sem dados.</div>`;
+
+  box.innerHTML = `
+    <div><b>Top 5 Empresa (hoje)</b></div>
+    ${renderList(topEmpresa)}
+    <div style="height:14px"></div>
+    <div><b>Top 5 Equipe (${equipe}) (hoje)</b></div>
+    ${renderList(sbEq)}
+  `;
+};
+
+/** =========================
+ *  TAB: CONFIG
+ *  ========================= */
+async function renderConfig(role, user, ud){
+  // corretor: msg padrão + upload minha lista
+  // gerente: upload equipe + email relatório
+  // diretor: upload geral + config geral
+  let html = ``;
+
+  if(role === "corretor"){
+    html += `
+      <div class="card">
+        <div><b>Mensagem Padrão</b></div>
+        <div class="small muted">Usa: {{nome}} {{telefone}} {{email}}</div>
+        <div class="divider"></div>
+        <textarea id="msgPadrao">${safe(ud.mensagemPadrao || "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.")}</textarea>
+        <div class="divider"></div>
+        <button class="btn btnBlue" onclick="salvarMensagemPadrao()">SALVAR MENSAGEM</button>
+      </div>
+
+      <div class="card">
+        <div><b>Upload • Minha Lista (Corretor)</b></div>
+        <div class="small muted">Aceita XLS/XLSX/CSV (A: Nome, B: Telefone, C: Email)</div>
+        <div class="divider"></div>
+        <input type="file" id="fileCorretor" accept=".xls,.xlsx,.csv" />
+        <button class="btn btnBlue" onclick="uploadListaCorretor()">ENVIAR MINHA LISTA</button>
+      </div>
+    `;
+  }else if(role === "gerente"){
+    const equipe = ud.equipe || "equipe1";
+    html += `
+      <div class="card">
+        <div><b>Upload • Lista do Gerente (Equipe)</b></div>
+        <div class="small muted">Equipe: <b>${equipe}</b></div>
+        <div class="divider"></div>
+        <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
+        <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR LISTA DA EQUIPE</button>
+      </div>
+
+      <div class="card">
+        <div><b>Email para relatórios</b></div>
+        <div class="small muted">Corretor pode enviar email pronto (opcional).</div>
+        <div class="divider"></div>
+        <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${safe(ud.emailRelatorio || "")}" />
+        <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
+      </div>
+    `;
+  }else{
+    html += `
+      <div class="card">
+        <div><b>Upload • Lista Geral (Diretoria)</b></div>
+        <div class="small muted">Distribui no upload para corretores <b>ATIVOS</b>.</div>
+        <div class="divider"></div>
+        <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
+        <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
+      </div>
+    `;
+  }
+
+  // todos: relatório rápido via email (opcional) + reset UI info
+  html += `
+    <div class="card">
+      <div><b>Relatório (Email pronto)</b></div>
+      <div class="small muted">O anexo Excel é gerado e baixado. O email só abre o envio.</div>
+      <div class="divider"></div>
+      <button class="btn btnGhost" onclick="prepararEmailRelatorio()">✉️ ABRIR EMAIL DE RELATÓRIO</button>
+    </div>
   `;
 
-  iniciarTimer(id);
+  return html;
 }
 
-window.finalizarLead = async function (id, resultado) {
-  await db.collection("leads").doc(id).update({
-    status: "finalizado",
-    resultado: resultado
-  });
-
-  document.getElementById("leadAtual").innerHTML = "";
+window.salvarMensagemPadrao = async function(){
+  const user = auth.currentUser;
+  const msg = $("msgPadrao").value || "";
+  await db.collection("users").doc(user.uid).update({ mensagemPadrao: msg });
+  cachedUserData = await getUserDoc(user.uid);
+  alert("Mensagem padrão salva!");
 };
 
-function iniciarTimer(id) {
-  const tempoMaximo = 20 * 60 * 1000;
-  const inicio = Date.now();
+window.salvarEmailRelatorio = async function(){
+  const user = auth.currentUser;
+  const email = ($("emailRelatorio").value || "").trim();
+  if(!email) return alert("Digite o email do gerente para relatórios.");
+  await db.collection("users").doc(user.uid).update({ emailRelatorio: email });
+  cachedUserData = await getUserDoc(user.uid);
+  alert("Email de relatórios salvo!");
+};
 
-  const intervalo = setInterval(async () => {
-    const agora = Date.now();
-    const restante = tempoMaximo - (agora - inicio);
+window.uploadListaGeral = async function(){
+  const file = $("fileDiretor")?.files?.[0];
+  if(!file) return alert("Selecione um arquivo.");
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(me.role !== "diretor") return alert("Apenas DIRETOR pode subir lista geral.");
+  try{
+    const r = await uploadLeadsFromFile({ file, origem:"geral", equipe:null, donoUploadUid:user.uid, distribuirGeralAgora:true });
+    alert(`Lista geral enviada! Total: ${r.total}.`);
+    $("fileDiretor").value = "";
+  }catch(e){
+    alert(e.message || e.code);
+  }
+};
 
-    if (restante <= 0) {
-      clearInterval(intervalo);
+window.uploadListaGerente = async function(){
+  const file = $("fileGerente")?.files?.[0];
+  if(!file) return alert("Selecione um arquivo.");
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(me.role !== "gerente") return alert("Apenas GERENTE pode subir lista da equipe.");
+  try{
+    const equipe = me.equipe || "equipe1";
+    const r = await uploadLeadsFromFile({ file, origem:"gerente", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false });
+    alert(`Lista da equipe enviada! Total: ${r.total}.`);
+    $("fileGerente").value = "";
+  }catch(e){
+    alert(e.message || e.code);
+  }
+};
 
-      await db.collection("leads").doc(id).update({
-        status: "fila",
-        corretorId: "",
-        timestampDistribuicao: 0
-      });
+window.uploadListaCorretor = async function(){
+  const file = $("fileCorretor")?.files?.[0];
+  if(!file) return alert("Selecione um arquivo.");
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  if(me.role !== "corretor") return alert("Apenas CORRETOR pode subir lista própria.");
+  try{
+    const equipe = me.equipe || "equipe1";
+    const r = await uploadLeadsFromFile({ file, origem:"corretor", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false });
+    alert(`Sua lista foi enviada! Total: ${r.total}.`);
+    $("fileCorretor").value = "";
+  }catch(e){
+    alert(e.message || e.code);
+  }
+};
 
-      document.getElementById("leadAtual").innerHTML = "";
-      alert("Tempo expirado. Lead voltou para fila.");
-    } else {
-      const minutos = Math.floor(restante / 60000);
-      const segundos = Math.floor((restante % 60000) / 1000);
-      document.getElementById("contador").innerText =
-        `Tempo restante: ${minutos}:${segundos.toString().padStart(2, '0')}`;
+window.prepararEmailRelatorio = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const role = me.role;
+  const equipe = me.equipe || "equipe1";
+
+  let to = "";
+  if(role === "corretor"){
+    const gsnap = await db.collection("users")
+      .where("role","==","gerente")
+      .where("equipe","==",equipe)
+      .where("aprovado","==",true)
+      .limit(1)
+      .get();
+    if(gsnap.empty){
+      alert("Nenhum gerente encontrado para sua equipe (ou sem aprovado).");
+      return;
     }
-  }, 1000);
+    const gerente = gsnap.docs[0].data();
+    to = gerente.emailRelatorio || gerente.email || "";
+    if(!to){
+      alert("Gerente sem emailRelatorio configurado.");
+      return;
+    }
+  }else{
+    // gerente/diretor: manda para si mesmo por padrão
+    to = user.email;
+  }
+
+  const today = dayKey(nowMs());
+  const subject = encodeURIComponent(`PROEFI - ALVENA | Relatório | ${today}`);
+  const body = encodeURIComponent(
+`Olá,
+
+Segue o relatório (gerado no PROEFI).
+Perfil: ${role.toUpperCase()}
+Email: ${user.email}
+Equipe: ${equipe}
+Data: ${today}
+
+(Anexo: arquivo Excel gerado no PROEFI)
+
+Att,
+PROEFI - ALVENA`
+  );
+
+  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
+};
+
+/** =========================
+ *  TAB: APROVAÇÃO
+ *  ========================= */
+async function renderAprovacao(role, user, ud){
+  if(role !== "diretor" && role !== "gerente"){
+    return `<div class="card"><b>Sem acesso.</b></div>`;
+  }
+
+  return `
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div><b>Aprovação de Acessos</b></div>
+          <div class="small muted">Diretor aprova todos. Gerente aprova apenas sua equipe.</div>
+        </div>
+        <button class="btn btnGold" style="max-width:220px" onclick="loadApprovals()">ATUALIZAR</button>
+      </div>
+      <div class="divider"></div>
+      <div id="approvalBox" class="muted">Clique em ATUALIZAR para ver pendentes.</div>
+    </div>
+  `;
 }
+
+window.loadApprovals = async function(){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const role = me.role;
+
+  if(role !== "diretor" && role !== "gerente"){
+    alert("Sem acesso.");
+    return;
+  }
+
+  const list = await listPendingUsers(me);
+  const box = $("approvalBox");
+  if(!list.length){
+    box.innerHTML = `<div class="ok">Nenhum acesso pendente.</div>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="list">
+      ${list.map(u=>`
+        <div class="item">
+          <div class="itemTop">
+            <div><b>${safe(u.nome)}</b> <span class="small muted">(${safe(u.role)})</span></div>
+            <span class="pill">Equipe: ${safe(u.equipe||"equipe1")}</span>
+          </div>
+          <div class="small muted" style="margin-top:6px">${safe(u.email)}</div>
+          <div class="divider"></div>
+          <div class="grid2">
+            <button class="btn btnGreen" onclick="approve('${u.uid}')">✅ APROVAR</button>
+            <button class="btn btnRed" onclick="deny('${u.uid}')">⛔ NEGAR</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+};
+
+window.approve = async function(uid){
+  const user = auth.currentUser;
+  const me = await getUserDoc(user.uid);
+  const ok = await openModal("Aprovar", "Deseja aprovar este acesso?");
+  if(!ok) return;
+  await approveUser(uid, user);
+  await loadApprovals();
+};
+
+window.deny = async function(uid){
+  const ok = await openModal("Negar", "Deseja negar este acesso? (Ele continuará existindo, mas não aprovado.)");
+  if(!ok) return;
+  await denyUser(uid);
+  await loadApprovals();
+};
+
+/** =========================
+ *  BOOTSTRAP AUTH
+ *  ========================= */
+auth.onAuthStateChanged(async (user)=>{
+  if(!user){
+    cachedAuthUser = null;
+    cachedUserData = null;
+    loginTimestamp = null;
+    leadAtualRef = null;
+    leadAtualData = null;
+    detailsOpen = false;
+    currentTab = "painel";
+    renderLogin();
+    return;
+  }
+
+  cachedAuthUser = user;
+  loginTimestamp = nowMs();
+
+  const snap = await db.collection("users").doc(user.uid).get();
+  if(!snap.exists){
+    // se não existe doc, cria pendente mínimo
+    await db.collection("users").doc(user.uid).set({
+      email: user.email || "",
+      nome: "",
+      equipe: "equipe1",
+      role: (String(user.email||"").toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()) ? "diretor" : "corretor",
+      aprovado: (String(user.email||"").toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()),
+      criadoEm: nowMs(),
+      ativo:false,
+      ativoAtualizadoEm: nowMs(),
+      mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
+      emailRelatorio: ""
+    });
+  }
+
+  cachedUserData = await getUserDoc(user.uid);
+
+  // master sempre aprovado
+  if(String(user.email||"").toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase()){
+    if(!cachedUserData.aprovado || cachedUserData.role !== "diretor"){
+      await db.collection("users").doc(user.uid).update({ aprovado:true, role:"diretor" });
+      cachedUserData = await getUserDoc(user.uid);
+    }
+  }
+
+  // bloqueio pendente
+  if(!cachedUserData.aprovado){
+    renderPendingApproval();
+    return;
+  }
+
+  // default tab
+  if(cachedUserData.role === "diretor" && currentTab === "atendimento") currentTab = "painel";
+  if(cachedUserData.role === "gerente" && currentTab === "atendimento") currentTab = "painel";
+  if(cachedUserData.role === "diretor" && !["painel","minicrm","resultados","aprovacao","config"].includes(currentTab)) currentTab="painel";
+  if(cachedUserData.role === "gerente" && !["painel","minicrm","resultados","config","aprovacao"].includes(currentTab)) currentTab="painel";
+
+  await renderAppShell();
+});
 </script>
 </body>
 </html>
