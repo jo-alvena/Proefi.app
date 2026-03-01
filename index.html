@@ -1,1473 +1,458 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>PROEFI - ALVENA</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROEFI - ALVENA (Enterprise)</title>
 
-  <style>
-    :root{
-      --blue:#21346C;
-      --gold:#BC8A0B;
-      --white:#FFFFFF;
-      --greenLight:#B9F6CA;
-      --redLight:#FFCCCB;
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-      --bg1:#21346C;
-      --bg2:#0f1b3f;
-
-      --text:#0f1b3f;
-      --navSpace: 180px;
-
-      --cardShadow: 0 10px 26px rgba(0,0,0,0.16);
-      --radius: 16px;
-    }
-
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family: Arial, sans-serif;
-      background: linear-gradient(180deg, var(--bg1), var(--bg2));
-      color: var(--white);
-      min-height: 100vh;
-    }
-    .wrap{
-      max-width: 650px;
-      margin: 0 auto;
-      padding: 18px 16px calc(var(--navSpace) + 18px) 16px;
-    }
-
-    .brand{
-      text-align:center;
-      margin-top:10px;
-      margin-bottom:18px;
-    }
-    .brand h1{
-      margin:0;
-      font-size:28px;
-      letter-spacing:0.5px;
-      color: var(--gold);
-    }
-    .brand .sub{
-      margin-top:6px;
-      line-height:1.25;
-      color: var(--white);
-      opacity:0.95;
-      font-size:14px;
-    }
-
-    .card{
-      background: var(--white);
-      color: var(--text);
-      border-radius: var(--radius);
-      padding: 16px;
-      box-shadow: var(--cardShadow);
-      margin-bottom: 14px;
-    }
-
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .grow{flex:1}
-
-    input, select, textarea{
-      width:100%;
-      padding:12px;
-      border-radius:12px;
-      border:1px solid rgba(33,52,108,0.25);
-      font-size:16px;
-      outline:none;
-    }
-    textarea{min-height:90px; resize:vertical}
-
-    .fieldLabel{
-      font-size:12px;
-      opacity:0.85;
-      margin-bottom:6px;
-      margin-top:12px;
-    }
-
-    .btn{
-      width:100%;
-      padding:14px;
-      border:none;
-      border-radius:14px;
-      font-size:16px;
-      font-weight:900;
-      cursor:pointer;
-      transition: transform .06s ease;
-    }
-    .btn:active{ transform: scale(0.99); }
-
-    .btnGold{ background: var(--gold); color: var(--white); }
-    .btnBlue{ background: var(--blue); color: var(--white); }
-    .btnGreen{ background: var(--greenLight); color: var(--blue); }
-    .btnRed{ background: var(--redLight); color: var(--blue); }
-
-    .btnGhost{
-      background: transparent;
-      color: var(--blue);
-      border:2px solid rgba(33,52,108,0.25);
-    }
-
-    .pill{
-      display:inline-block;
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:900;
-      background: rgba(188,138,11,0.12);
-      color: var(--blue);
-      white-space: nowrap;
-    }
-
-    .muted{opacity:0.75}
-    .small{font-size:12px}
-    .divider{height:1px; background:rgba(33,52,108,0.12); margin:12px 0}
-    .center{text-align:center}
-
-    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-    .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-    @media (max-width:420px){
-      .grid3{grid-template-columns:1fr}
-    }
-
-    a{ text-decoration:none; }
-    .danger{color:#b00020; font-weight:900}
-    .ok{color:#0b6b2b; font-weight:900}
-
-    .tableWrap{
-      width:100%;
-      overflow-x:auto;
-      -webkit-overflow-scrolling: touch;
-      border-radius: 14px;
-      border: 1px solid rgba(15,29,68,0.10);
-    }
-    table{ width:100%; border-collapse: collapse; min-width: 620px; }
-    th, td{ text-align:left; padding: 10px 10px; border-bottom: 1px solid rgba(15,29,68,0.10); font-size: 13px; }
-    th{ background: rgba(33,52,108,0.06); font-size: 12px; letter-spacing:.2px; text-transform: uppercase; }
-    tr:last-child td{border-bottom:none}
-
-    .hidden{display:none !important}
-
-    /* MENU INFERIOR (maior e proporcional) */
-    .nav{
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      background: rgba(255,255,255,0.94);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(15,29,68,0.10);
-      display:flex;
-      justify-content:center;
-      z-index: 999;
-      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-    }
-    .navInner{
-      width: min(820px, 100%);
-      display:grid;
-      gap: 10px;
-    }
-    .navInner[data-count="4"]{ grid-template-columns: repeat(4, 1fr); }
-    .navInner[data-count="5"]{ grid-template-columns: repeat(3, 1fr); }
-    .navInner[data-count="3"]{ grid-template-columns: repeat(3, 1fr); }
-
-    .navBtn{
-      border: 1px solid rgba(15,29,68,0.12);
-      border-radius: 18px;
-      font-weight: 1000;
-      font-size: 15px;
-      padding: 12px 10px;
-      cursor:pointer;
-      background: rgba(33,52,108,0.08);
-      color: var(--text);
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
-      min-height: 66px;
-      line-height:1.05;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .navBtn small{
-      font-size: 12px;
-      opacity:.78;
-      font-weight: 900;
-      letter-spacing:.2px;
-    }
-    .navBtnActive{
-      background: rgba(188,138,11,0.20);
-      border-color: rgba(188,138,11,0.35);
-    }
-
-    @media (max-width: 720px){
-      .navInner[data-count="4"]{ grid-template-columns: repeat(2, 1fr); }
-      .navInner[data-count="5"]{ grid-template-columns: repeat(2, 1fr); }
-      .navInner[data-count="3"]{ grid-template-columns: repeat(2, 1fr); }
-      .navBtn{ font-size: 16px; min-height: 72px; }
-      .navBtn small{ font-size: 13px; }
-      :root{ --navSpace: 220px; }
-    }
-
-    .errBox{
-      background: #fff;
-      color:#111;
-      border-radius: 16px;
-      padding:16px;
-      box-shadow: var(--cardShadow);
-      margin-top: 12px;
-      white-space: pre-wrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 12px;
-      overflow:auto;
-      max-height: 45vh;
-    }
-  </style>
+<style>
+:root{
+  --blue:#21346C;
+  --gold:#BC8A0B;
+  --bg:#f4f6fb;
+  --ok:#b9f6ca;
+  --no:#ffcdd2;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#1f2a44}
+.header{background:var(--blue);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5}
+.container{max-width:980px;margin:0 auto;padding:12px}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+h1,h2,h3{margin:6px 0 10px}
+input,select,textarea,button{font-size:16px}
+input,select,textarea{width:100%;padding:10px;border:1px solid #d6d9e3;border-radius:10px}
+textarea{min-height:90px}
+.btn{border:none;border-radius:10px;padding:12px 14px;font-weight:700;cursor:pointer}
+.btn-primary{background:var(--gold);color:#fff}
+.btn-secondary{background:var(--blue);color:#fff}
+.btn-ok{background:var(--ok)}
+.btn-no{background:var(--no)}
+.row{display:grid;gap:8px}
+.row-2{grid-template-columns:1fr 1fr}
+.row-3{grid-template-columns:1fr 1fr 1fr}
+.small{font-size:12px;opacity:.8}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff;font-size:12px}
+.tabs{
+ position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e5e7ef;
+ display:flex;justify-content:space-around;gap:6px;padding:10px 8px;z-index:10
+}
+.tab{flex:1;text-align:center;padding:10px 6px;border-radius:10px;font-weight:700;color:#21346C;background:#f2f4fa}
+.tab.active{background:#e6ecff}
+.spacer{height:76px}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+.hidden{display:none}
+</style>
 </head>
-
 <body>
-  <div class="wrap" id="app">Carregando…</div>
-
-  <div class="nav hidden" id="bottomNav">
-    <div class="navInner" id="navInner"></div>
+<div class="header">
+  <div style="max-width:980px;margin:0 auto;">
+    <strong>PROEFI - ALVENA</strong>
+    <div class="small">Produção Eficiente · Alvena Soluções Imobiliária</div>
   </div>
+</div>
+
+<div class="container" id="app">Carregando...</div>
+<div class="spacer"></div>
+
+<div class="tabs hidden" id="tabs">
+  <div class="tab active" data-tab="painel">Painel</div>
+  <div class="tab" data-tab="atendimento">Atendimento</div>
+  <div class="tab" data-tab="mini">Mini CRM</div>
+  <div class="tab" data-tab="resultados">Resultados</div>
+  <div class="tab" data-tab="config">Config</div>
+</div>
 
 <script>
-/* ==========================================================
-   LOADER DIAGNÓSTICO
-   ========================================================== */
-function $(id){ return document.getElementById(id); }
-function escapeHtml(str){
-  return String(str || "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+const firebaseConfig = {
+  apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
+  authDomain: "proefi-alvena.firebaseapp.com",
+  projectId: "proefi-alvena",
+  storageBucket: "proefi-alvena.firebasestorage.app",
+  messagingSenderId: "1084612497727",
+  appId: "1:1084612497727:web:d9b1de2962cce8123b038a"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const state = {
+  user:null,
+  profile:null,
+  currentTab:'painel',
+  lead:null,
+  leadRef:null,
+  loginAt:null,
+};
+
+const moneySound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+
+function $(id){return document.getElementById(id);}
+function fmtTime(ms){
+  const s=Math.floor(ms/1000); const m=Math.floor(s/60); const r=s%60;
+  return `${m}m ${r}s`;
 }
-function showBoot(msg){
-  const app = $("app");
-  if(app) app.innerHTML = `<div class="brand">
-    <h1>PROEFI - ALVENA</h1>
-    <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliária</div>
-  </div>
+function safePlay(){ try{ moneySound.currentTime=0; moneySound.play(); }catch(e){} }
+
+function showLogin(){
+  $("tabs").classList.add("hidden");
+  $("app").innerHTML = `
   <div class="card">
-    <b>Inicializando…</b>
-    <div class="divider"></div>
-    <div class="small muted">${escapeHtml(msg)}</div>
+    <h2>Entrar</h2>
+    <div class="row">
+      <input id="email" placeholder="Email"/>
+      <input id="senha" type="password" placeholder="Senha"/>
+      <button class="btn btn-primary" onclick="login()">Entrar</button>
+      <button class="btn btn-secondary" onclick="register()">Criar acesso</button>
+      <div class="small">Novos acessos ficam pendentes até aprovação.</div>
+    </div>
   </div>`;
 }
-function renderFatal(title, err){
-  $("bottomNav")?.classList?.add("hidden");
-  $("app").innerHTML = `
-    <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliária</div>
-    </div>
-    <div class="card">
-      <div class="danger"><b>${escapeHtml(title)}</b></div>
-      <div class="small muted">Copie esse erro e me envie.</div>
-      <div class="divider"></div>
-      <div class="errBox">${escapeHtml(String(err && (err.stack || err.message || err) || "Erro desconhecido"))}</div>
-      <div class="divider"></div>
-      <button class="btn btnGold" onclick="location.reload()">RECARREGAR</button>
-    </div>
-  `;
-}
-window.addEventListener("error", (e)=>{
-  renderFatal("Erro no JavaScript (travou o carregamento)", e.error || e.message || e);
-});
-window.addEventListener("unhandledrejection", (e)=>{
-  renderFatal("Promise rejeitada (travou o carregamento)", e.reason || e);
-});
-function loadScript(src){
-  return new Promise((resolve, reject)=>{
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => resolve(true);
-    s.onerror = () => reject(new Error("Falha ao carregar: " + src));
-    document.head.appendChild(s);
-  });
-}
 
-(async function boot(){
+async function login(){
   try{
-    showBoot("Carregando Firebase… (app-compat)");
-    await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
+    await auth.signInWithEmailAndPassword($("email").value,$("senha").value);
+  }catch(e){ alert(e.message); }
+}
+async function register(){
+  try{
+    const cred = await auth.createUserWithEmailAndPassword($("email").value,$("senha").value);
+    await db.collection("users").doc(cred.user.uid).set({
+      email:$("email").value,
+      role:"corretor",
+      aprovado:false,
+      equipe:"geral",
+      createdAt:Date.now()
+    },{merge:true});
+    alert("Acesso criado. Aguarde aprovação.");
+  }catch(e){ alert(e.message); }
+}
 
-    showBoot("Carregando Firebase… (auth-compat)");
-    await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js");
-
-    showBoot("Carregando Firebase… (firestore-compat)");
-    await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js");
-
-    showBoot("Carregando XLSX…");
-    await loadScript("https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js");
-
-    if(typeof firebase === "undefined") throw new Error("Firebase não foi carregado (firebase undefined).");
-    if(typeof XLSX === "undefined") throw new Error("XLSX não foi carregado (XLSX undefined).");
-
-    showBoot("Iniciando aplicativo…");
-    await startApp();
-  }catch(err){
-    renderFatal("Falha na inicialização (scripts)", err);
+async function loadProfile(uid){
+  const ref = db.collection("users").doc(uid);
+  const snap = await ref.get();
+  if(!snap.exists){
+    await ref.set({email:auth.currentUser.email,role:"corretor",aprovado:false,equipe:"geral"},{merge:true});
+    return (await ref.get()).data();
   }
-})();
-
-/* ==========================================================
-   APP REAL
-   ========================================================== */
-async function startApp(){
-  const firebaseConfig = {
-    apiKey: "AIzaSyAPO-xtmzg0QMvSoDfHd6nRcmrDb7F8n6k",
-    authDomain: "proefi-alvena.firebaseapp.com",
-    projectId: "proefi-alvena",
-    storageBucket: "proefi-alvena.firebasestorage.app",
-    messagingSenderId: "1084612497727",
-    appId: "1:1084612497727:web:d9b1de2962cce8123b038a",
-    measurementId: "G-SZPXEMV5B4"
-  };
-
-  const MASTER_DIRECTOR_EMAIL = "jo.alvenasolucoes@gmail.com";
-
-  function nowMs(){ return Date.now(); }
-  function cleanPhone(raw){ return String(raw || "").replace(/\D/g,''); }
-  function templateMessage(msg, lead){
-    const nome = lead?.nome || "";
-    const tel  = lead?.telefone || "";
-    const em   = lead?.email || "";
-    return String(msg || "")
-      .replaceAll("{{nome}}", nome)
-      .replaceAll("{{telefone}}", tel)
-      .replaceAll("{{email}}", em);
+  const p = snap.data();
+  if(auth.currentUser.email==="jo.alvenasolucoes@gmail.com"){
+    await ref.set({role:"diretor",aprovado:true},{merge:true});
+    p.role="diretor"; p.aprovado=true;
   }
-  function isMasterDirectorEmail(email){
-    return String(email || "").toLowerCase() === MASTER_DIRECTOR_EMAIL.toLowerCase();
+  return p;
+}
+
+function roleTabs(role){
+  const tabs = $("tabs");
+  tabs.classList.remove("hidden");
+  const arr = [...tabs.querySelectorAll(".tab")];
+  arr.forEach(t=>t.style.display="block");
+  if(role==="gerente"){
+    arr.find(t=>t.dataset.tab==="atendimento").style.display="none";
   }
-  function dayStartMs(ts){ const d=new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
-  function dayEndMs(ts){ const d=new Date(ts); d.setHours(23,59,59,999); return d.getTime(); }
-  function toISODateInput(ts){
-    const d = new Date(ts);
-    const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,'0');
-    const da = String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${da}`;
+}
+
+function setTab(tab){
+  state.currentTab = tab;
+  [...$("tabs").querySelectorAll(".tab")].forEach(t=>t.classList.toggle("active",t.dataset.tab===tab));
+  renderApp();
+}
+
+$("tabs").addEventListener("click",e=>{
+  const t=e.target.closest(".tab");
+  if(!t) return;
+  setTab(t.dataset.tab);
+});
+
+async function renderApp(){
+  if(!state.user){ showLogin(); return; }
+  const p = state.profile;
+  if(!p.aprovado){
+    $("tabs").classList.add("hidden");
+    $("app").innerHTML = `<div class="card"><h3>Aguardando aprovação</h3>
+    <div class="small">Peça ao diretor/gerente para aprovar seu acesso.</div>
+    <button class="btn btn-secondary" onclick="logout()">Sair</button></div>`;
+    return;
   }
-  function parseISODateInput(val){
-    if(!val) return null;
-    const [y,m,d] = val.split("-").map(Number);
-    return new Date(y, m-1, d, 12, 0, 0, 0).getTime();
-  }
+  roleTabs(p.role);
 
-  function renderBrand(){
-    return `
-      <div class="brand">
-        <h1>PROEFI - ALVENA</h1>
-        <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliária</div>
-      </div>
-    `;
-  }
+  if(state.currentTab==="painel") return renderPainel();
+  if(state.currentTab==="atendimento") return renderAtendimento();
+  if(state.currentTab==="mini") return renderMini();
+  if(state.currentTab==="resultados") return renderResultados();
+  if(state.currentTab==="config") return renderConfig();
+}
 
-  /* sound */
-  function playCash(){
-    if(!state.soundOn) return;
-    try{
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.setValueAtTime(520, ctx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(820, ctx.currentTime + 0.08);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
-      o.connect(g); g.connect(ctx.destination);
-      o.start(); o.stop(ctx.currentTime + 0.13);
-      setTimeout(()=>ctx.close(), 300);
-    }catch(_){}
-  }
+async function renderPainel(){
+  const p=state.profile;
+  let html = `<div class="card"><h2>Painel (${p.role.toUpperCase()})</h2>
+  <div class="small">Logado como ${state.user.email}</div>
+  <button class="btn btn-secondary" onclick="logout()">Sair</button></div>`;
 
-  /* firebase init */
-  try{ firebase.initializeApp(firebaseConfig); }catch(e){}
-
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-
-  /* ✅ CORREÇÃO: logout global para usar nos onclick */
-  window.doLogout = () => auth.signOut();
-
-  /* state */
-  const state = {
-    tab: "painel",
-    user: null,
-    userDoc: null,
-    leadAtualRef: null,
-    leadAtualData: null,
-    leadSource: "geral",
-    soundOn: true
-  };
-
-  async function getUserDoc(uid){
-    const snap = await db.collection("users").doc(uid).get();
-    return snap.exists ? snap.data() : null;
-  }
-
-  function renderHeader(userEmail, role, extraHtml=""){
-    return `
-      ${renderBrand()}
-      <div class="card">
-        <div class="row">
-          <div class="grow">
-            <div><b>${escapeHtml(role.toUpperCase())}</b></div>
-            <div class="small muted">${escapeHtml(userEmail)}</div>
-          </div>
-          ${extraHtml}
-        </div>
-        <div class="divider"></div>
-        <button class="btn btnGold" onclick="doLogout()">SAIR</button>
-      </div>
-    `;
-  }
-
-  function activeBadge(ativo){
-    if(ativo) return `<span class="pill">ATIVO</span>`;
-    return `<span class="pill" style="background:rgba(255,204,203,0.7)">PAUSADO</span>`;
-  }
-
-  function setTabsForRole(role){
-    const nav = $("bottomNav");
-    const inner = $("navInner");
-    inner.innerHTML = "";
-
-    const tabs = [];
-    tabs.push({id:"painel", label:"Painel", sub:"status"});
-    tabs.push({id:"mini", label:"Mini CRM", sub:"foco"});
-    if(role === "corretor") tabs.push({id:"atend", label:"Atendimento", sub:"leads"});
-    tabs.push({id:"result", label:"Resultados", sub:"top 5"});
-    tabs.push({id:"config", label:"Config", sub:"ajustes"});
-
-    inner.dataset.count = String(tabs.length);
-
-    for(const t of tabs){
-      const btn = document.createElement("button");
-      btn.className = "navBtn";
-      btn.id = "tab_"+t.id;
-      btn.innerHTML = `${escapeHtml(t.label)}<small>${escapeHtml(t.sub)}</small>`;
-      btn.onclick = () => goTab(t.id);
-      inner.appendChild(btn);
-    }
-
-    nav.classList.remove("hidden");
-    updateNavActive();
-  }
-
-  function updateNavActive(){
-    ["painel","mini","atend","result","config"].forEach(id=>{
-      const el = $("tab_"+id);
-      if(!el) return;
-      el.classList.toggle("navBtnActive", state.tab === id);
-    });
-  }
-
-  window.goTab = async function(id){
-    state.tab = id;
-    updateNavActive();
-    await renderApp();
-  };
-
-  function renderLogin(){
-    $("bottomNav").classList.add("hidden");
-    $("app").innerHTML = `
-      ${renderBrand()}
-      <div class="card">
-        <div class="fieldLabel">Email</div>
-        <input id="email" placeholder="Digite seu email" style="border:2px solid var(--gold)" />
-
-        <div class="fieldLabel">Senha</div>
-        <input id="senha" type="password" placeholder="Digite sua senha" style="border:2px solid var(--gold)" />
-
-        <div class="divider"></div>
-        <div class="grid2">
-          <button class="btn btnGold" onclick="doLogin()">ENTRAR</button>
-          <button class="btn btnBlue" onclick="toggleSignup(true)">CRIAR ACESSO</button>
-        </div>
-
-        <div class="divider"></div>
-        <div class="small muted center">
-          Se criar acesso, ficará <b>PENDENTE</b> até aprovação do Diretor/Gestor.
-        </div>
-      </div>
-
-      <div class="card hidden" id="signupCard">
-        <div><b>Criar Acesso (Pendente)</b></div>
-        <div class="small muted">Diretor/Gestor aprova no Painel.</div>
-        <div class="divider"></div>
-
-        <div class="fieldLabel">Nome</div>
-        <input id="nomeSignup" placeholder="Seu nome" />
-
-        <div class="fieldLabel">Equipe (ex: equipe1)</div>
-        <input id="equipeSignup" placeholder="ex: equipe1" />
-
-        <div class="fieldLabel">Perfil</div>
-        <select id="roleSignup">
-          <option value="corretor">CORRETOR</option>
-          <option value="gerente">GERENTE</option>
-        </select>
-
-        <div class="divider"></div>
-        <button class="btn btnGold" onclick="doSignup()">CRIAR E AGUARDAR APROVAÇÃO</button>
-        <button class="btn btnGhost" style="margin-top:10px" onclick="toggleSignup(false)">CANCELAR</button>
-      </div>
-    `;
-  }
-
-  window.toggleSignup = (open) => {
-    const el = $("signupCard");
-    if(!el) return;
-    el.classList.toggle("hidden", !open);
-  };
-
-  window.doLogin = async function(){
-    const email = ($("email").value || "").trim();
-    const senha = $("senha").value || "";
-    try{
-      await auth.signInWithEmailAndPassword(email, senha);
-    }catch(e){
-      alert(e.message || e.code);
-    }
-  };
-
-  window.doSignup = async function(){
-    const email = ($("email").value || "").trim();
-    const senha = $("senha").value || "";
-    const nome  = ($("nomeSignup").value || "").trim();
-    const equipe = ($("equipeSignup").value || "").trim() || "equipe1";
-    const role = $("roleSignup").value;
-
-    if(!email || !senha) return alert("Preencha email e senha.");
-    if(senha.length < 6) return alert("Senha mínima: 6 caracteres.");
-    if(!nome) return alert("Preencha seu nome.");
-
-    try{
-      const cred = await auth.createUserWithEmailAndPassword(email, senha);
-      const uid = cred.user.uid;
-      const isMaster = isMasterDirectorEmail(email);
-
-      await db.collection("users").doc(uid).set({
-        email,
-        nome,
-        equipe,
-        role: isMaster ? "diretor" : role,
-        aprovado: isMaster ? true : false,
-        aprovadoEm: isMaster ? nowMs() : null,
-        aprovadoPor: isMaster ? "MASTER" : null,
-        ativo: false,
-        ativoAtualizadoEm: nowMs(),
-        mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
-        emailRelatorio: "",
-        criadoEm: nowMs()
+  if(p.role==="diretor" || p.role==="gerente"){
+    const pend = await db.collection("users").where("aprovado","!=",true).get().catch(()=>null);
+    html += `<div class="card"><h3>Acessos pendentes</h3>`;
+    if(!pend || pend.empty){ html += `<div class="small">Nenhum pendente.</div>`; }
+    else{
+      pend.forEach(d=>{
+        const u=d.data();
+        html += `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px">
+          <div>${u.email || d.id} <span class="badge">${u.role||"corretor"}</span></div>
+          <button class="btn btn-primary" style="width:auto" onclick="approve('${d.id}')">Aprovar</button>
+        </div>`;
       });
+    }
+    html += `</div>`;
+  }
 
-      alert("Acesso criado! Agora aguarde aprovação.");
-    }catch(e){
-      if(String(e.code||"").includes("email-already-in-use")){
-        alert("Este email já existe. Se estiver pendente, aguarde aprovação.");
+  // Top 5
+  const top = await computeTop();
+  html += `<div class="card"><h3>🔥 Top 5 Empresa</h3>`;
+  if(top.length===0) html += `<div class="small">Sem dados ainda.</div>`;
+  top.forEach((t,i)=> html += `<div>${i+1}º ${t.name} — ${t.points} pts</div>`);
+  html += `</div>`;
+
+  $("app").innerHTML = html;
+}
+
+async function approve(uid){
+  await db.collection("users").doc(uid).set({aprovado:true},{merge:true});
+  alert("Aprovado!");
+  renderPainel();
+}
+
+async function renderAtendimento(){
+  const p=state.profile;
+  if(p.role!=="corretor"){
+    $("app").innerHTML = `<div class="card"><h3>Atendimento desativado para este perfil.</h3></div>`;
+    return;
+  }
+  const lead = state.lead;
+  let html = `<div class="card"><h2>Atendimento</h2>
+  <div class="small">Tempo logado: ${state.loginAt?fmtTime(Date.now()-state.loginAt):"0m 0s"}</div>
+  <div class="row row-2">
+    <button class="btn btn-secondary" onclick="nextLead()">Pegar próximo lead</button>
+    <button class="btn" onclick="pauseToggle()">Ativo/Pausado</button>
+  </div></div>`;
+
+  if(!lead){
+    html += `<div class="card"><div class="small">Nenhum lead em atendimento.</div></div>`;
+  }else{
+    html += `<div class="card">
+      <h3>${lead.nome||"Sem nome"}</h3>
+      <div>${lead.telefone||"-"} · ${lead.email||"-"}</div>
+      <div class="row row-2" style="margin-top:8px">
+        <button class="btn btn-ok" onclick="markAtendeu()">ATENDEU</button>
+        <button class="btn btn-no" onclick="markNaoAtendeu()">NÃO ATENDEU</button>
+      </div>
+      <div id="flow"></div>
+    </div>`;
+  }
+
+  $("app").innerHTML = html;
+}
+
+async function nextLead(){
+  if(state.leadRef){ alert("Finalize o lead atual."); return; }
+  const q = await db.collection("leads").where("status","==","fila").limit(1).get();
+  if(q.empty){ alert("Sem leads na fila."); return; }
+  const doc=q.docs[0];
+  state.leadRef = doc.ref;
+  state.lead = doc.data();
+  await doc.ref.set({status:"em_atendimento",corretorId:state.user.uid,startedAt:Date.now()},{merge:true});
+  renderAtendimento();
+}
+
+function markAtendeu(){
+  $("flow").innerHTML = `
+  <div class="card" style="margin-top:8px">
+    <div class="row row-3">
+      <button class="btn btn-primary" onclick="finishLead('AGENDAMENTO')">Agendamento</button>
+      <button class="btn btn-primary" onclick="finishLead('PROMESSA DOCUMENTAÇÃO')">Promessa</button>
+      <button class="btn btn-secondary" onclick="finishLead('SEM INTERESSE')">Sem interesse</button>
+    </div>
+    <textarea id="obs" placeholder="Feedback (obrigatório se Sem interesse)"></textarea>
+  </div>`;
+}
+
+async function markNaoAtendeu(){
+  if(!state.leadRef) return;
+  await state.leadRef.set({status:"fila",atendeu:false,lastTry:Date.now()},{merge:true});
+  state.lead=null; state.leadRef=null;
+  await nextLead();
+}
+
+async function finishLead(result){
+  if(!state.leadRef) return;
+  const obs = $("obs") ? $("obs").value.trim() : "";
+  if(result==="SEM INTERESSE" && !obs){ alert("Preencha o feedback."); return; }
+  await state.leadRef.set({
+    status:"finalizado",
+    atendeu:true,
+    resultado:result,
+    observacao:obs,
+    finishedAt:Date.now(),
+    corretorId:state.user.uid,
+    equipe:state.profile.equipe||"geral"
+  },{merge:true});
+  if(result!=="SEM INTERESSE") safePlay();
+  state.lead=null; state.leadRef=null;
+  renderAtendimento();
+}
+
+function pauseToggle(){ alert("Status pausado/ativo salvo automaticamente (placeholder)."); }
+
+async function renderMini(){
+  const role=state.profile.role;
+  const q = await db.collection("leads").where("atendeu","==",true).limit(100).get();
+  let html = `<div class="card"><h2>Mini CRM</h2></div><div class="card">`;
+  if(q.empty){ html += `<div class="small">Sem registros.</div>`; }
+  else{
+    q.forEach(d=>{
+      const x=d.data();
+      if(!(x.resultado==="AGENDAMENTO" || x.resultado==="PROMESSA DOCUMENTAÇÃO")) return;
+      if(role==="diretor"){
+        html += `<div>${x.resultado} · 👤 ${x.corretorId||"-"}</div>`;
+      }else if(role==="gerente"){
+        html += `<div>${x.nome||"-"} · ${x.telefone||"-"} · ${x.resultado} · 👤 ${x.corretorId||"-"}</div>`;
       }else{
-        alert(e.message || e.code);
+        if(x.corretorId!==state.user.uid) return;
+        html += `<div>${x.nome||"-"} · ${x.resultado}</div>`;
       }
-    }
-  };
-
-  function renderPendingApproval(){
-    $("bottomNav").classList.add("hidden");
-    $("app").innerHTML = `
-      ${renderBrand()}
-      <div class="card">
-        <div class="danger">Acesso PENDENTE.</div>
-        <div class="small muted">Aguarde aprovação do Diretor/Gestor.</div>
-        <div class="divider"></div>
-        <button class="btn btnGold" onclick="doLogout()">SAIR</button>
-      </div>
-    `;
-  }
-
-  async function fetchPendingUsersForApprover(){
-    const me = state.userDoc;
-    if(!me) return [];
-
-    if(me.role === "diretor"){
-      const snap = await db.collection("users").where("aprovado","==",false).get();
-      return snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    }
-
-    if(me.role === "gerente"){
-      const equipe = me.equipe || "equipe1";
-      const snap = await db.collection("users")
-        .where("aprovado","==",false)
-        .where("equipe","==",equipe)
-        .get();
-      return snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    }
-
-    return [];
-  }
-
-  window.approveAccess = async function(uid){
-    const me = state.userDoc;
-    const approver = me.role === "diretor" ? "diretor" : "gerente";
-    await db.collection("users").doc(uid).update({
-      aprovado: true,
-      aprovadoEm: nowMs(),
-      aprovadoPor: `${approver}:${state.user.email}`
     });
-    alert("Acesso aprovado!");
-    await renderApp();
-  };
-
-  window.denyAccess = async function(uid){
-    if(!confirm("Negar acesso? Isso removerá o usuário.")) return;
-    await db.collection("users").doc(uid).delete();
-    alert("Acesso negado/removido.");
-    await renderApp();
-  };
-
-  async function setActiveStatus(uid, ativo){
-    await db.collection("users").doc(uid).update({ ativo: !!ativo, ativoAtualizadoEm: nowMs() });
   }
-
-  window.setMeActive = async function(ativo){
-    await setActiveStatus(state.user.uid, ativo);
-    state.userDoc = await getUserDoc(state.user.uid);
-    await renderApp();
-  };
-
-  /* ======= XLSX / Leads (mantido) ======= */
-  function parseSheetRows(workbook){
-    const sheetName = workbook.SheetNames[0];
-    const ws = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
-    return rows.filter(r => r && r.some(cell => String(cell).trim() !== ""));
-  }
-  function detectHeaderRow(rows){
-    const keys = ["nome","telefone","celular","contato","email","e-mail"];
-    for(let i=0;i<Math.min(6, rows.length);i++){
-      const row = rows[i].map(c=>String(c).toLowerCase().trim());
-      if(row.some(c => keys.includes(c))) return i;
-    }
-    return 0;
-  }
-  function mapLeadColumns(row){
-    return {
-      nome: String(row[0] || "").trim(),
-      telefone: String(row[1] || "").trim(),
-      email: String(row[2] || "").trim()
-    };
-  }
-  function makeLeadDoc(base){
-    return {
-      nome: base.nome || "",
-      telefone: base.telefone || "",
-      email: base.email || "",
-      status: "fila",
-      corretorId: null,
-      criadoEm: nowMs(),
-      atualizadoEm: nowMs(),
-      emAtendimentoEm: null,
-      timestampDistribuicao: null,
-      timestampFinalizacao: null,
-      atendeu: null,
-      resultado: null,
-      observacao: null,
-      dataAgendada: null,
-      totalTentativas: 0,
-      origem: null,
-      equipe: null,
-      donoUpload: null,
-      listaRef: null
-    };
-  }
-
-  async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distribuirGeralAgora }){
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: "array" });
-    const rows = parseSheetRows(workbook);
-    if(rows.length === 0) throw new Error("Planilha vazia.");
-
-    const headerIndex = detectHeaderRow(rows);
-    const dataRows = rows.slice(headerIndex + 1);
-
-    const parsed = [];
-    for(const r of dataRows){
-      const lead = mapLeadColumns(r);
-      if(!lead.nome && !lead.telefone && !lead.email) continue;
-      if(!lead.telefone) continue;
-      parsed.push(lead);
-    }
-    if(parsed.length === 0) throw new Error("Nenhum lead válido (colunas A/B/C).");
-
-    const listaDoc = await db.collection("listas").add({
-      origem,
-      equipe: equipe || null,
-      donoUpload: donoUploadUid,
-      arquivoNome: file.name,
-      total: parsed.length,
-      criadoEm: nowMs()
-    });
-    const listaRefId = listaDoc.id;
-
-    let corretoresAtivos = [];
-    if(origem === "geral" && distribuirGeralAgora){
-      const snap = await db.collection("users")
-        .where("role","==","corretor")
-        .where("ativo","==",true)
-        .where("aprovado","==",true)
-        .get();
-      corretoresAtivos = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-      if(corretoresAtivos.length === 0){
-        throw new Error("Nenhum corretor ATIVO no momento.");
-      }
-    }
-
-    const batchSize = 350;
-    let idx = 0;
-    while(idx < parsed.length){
-      const batch = db.batch();
-      const slice = parsed.slice(idx, idx + batchSize);
-
-      for(const leadBase of slice){
-        const docRef = db.collection("leads").doc();
-        const doc = makeLeadDoc(leadBase);
-
-        doc.origem = origem;
-        doc.equipe = equipe || null;
-        doc.donoUpload = donoUploadUid;
-        doc.listaRef = listaRefId;
-
-        if(origem === "geral" && distribuirGeralAgora){
-          const chosen = corretoresAtivos[Math.floor(Math.random() * corretoresAtivos.length)];
-          doc.corretorId = chosen.uid;
-          doc.status = "fila";
-        }
-        batch.set(docRef, doc);
-      }
-      await batch.commit();
-      idx += batchSize;
-    }
-
-    return { total: parsed.length, listaRefId };
-  }
-
-  async function pickNextLeadForCorretor({ source, corretorUid, equipeCorretor }){
-    let q = db.collection("leads").where("status","==","fila");
-
-    if(source === "geral"){
-      q = q.where("origem","==","geral").where("corretorId","==",corretorUid);
-    }else if(source === "gerente"){
-      q = q.where("origem","==","gerente").where("equipe","==",equipeCorretor).where("corretorId","==",null);
-    }else{
-      q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
-    }
-
-    const snap = await q.limit(1).get();
-    if(snap.empty) return null;
-
-    const docSnap = snap.docs[0];
-    const ref = docSnap.ref;
-
-    await ref.update({
-      status: "em atendimento",
-      corretorId: corretorUid,
-      emAtendimentoEm: nowMs(),
-      timestampDistribuicao: nowMs(),
-      atualizadoEm: nowMs(),
-      totalTentativas: firebase.firestore.FieldValue.increment(1)
-    });
-
-    const fresh = await ref.get();
-    return { ref, data: fresh.data() };
-  }
-
-  /* ======= TOP 5 (mantido) ======= */
-  function computeStatsFromLeads(leads, startMs, endMs){
-    let totalLigacoes = 0, totalNaoAtendeu = 0, totalAtendidos = 0, agend = 0, promessa = 0;
-    for(const d of leads){
-      if(d.timestampDistribuicao && d.timestampDistribuicao >= startMs && d.timestampDistribuicao <= endMs){
-        totalLigacoes += 1;
-        if(d.atendeu === false) totalNaoAtendeu += 1;
-      }
-      if(d.atendeu === true && d.timestampFinalizacao && d.timestampFinalizacao >= startMs && d.timestampFinalizacao <= endMs){
-        totalAtendidos += 1;
-        if(d.resultado === "AGENDAMENTO") agend += 1;
-        if(d.resultado === "PROMESSA DOCUMENTAÇÃO") promessa += 1;
-      }
-    }
-    return { totalLigacoes, totalNaoAtendeu, totalAtendidos, agend, promessa };
-  }
-  function scoreFromStats(st){
-    return (st.agend * 3) + (st.promessa * 2) + Math.floor(st.totalAtendidos * 0.5);
-  }
-  async function getLeadsByPeriod({startMs, endMs, filtros}){
-    let q = db.collection("leads");
-    if(filtros?.corretorId) q = q.where("corretorId","==",filtros.corretorId);
-    if(filtros?.equipe) q = q.where("equipe","==",filtros.equipe);
-
-    const snap = await q.get();
-    const arr = [];
-    snap.forEach(ds=>{
-      const d = ds.data();
-      const t = d.timestampDistribuicao || d.timestampFinalizacao || d.atualizadoEm || d.criadoEm || 0;
-      if(t >= startMs && t <= endMs) arr.push({ id: ds.id, ...d });
-    });
-    return arr;
-  }
-
-  async function computeTop5Empresa(startMs, endMs){
-    const usersSnap = await db.collection("users").where("role","==","corretor").where("aprovado","==",true).get();
-    const corretores = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    const results = [];
-    for(const c of corretores){
-      const leads = await getLeadsByPeriod({ startMs, endMs, filtros: { corretorId: c.uid } });
-      const st = computeStatsFromLeads(leads, startMs, endMs);
-      results.push({
-        corretor: c.nome || c.email || c.uid,
-        equipe: c.equipe || "",
-        score: scoreFromStats(st),
-        ...st
-      });
-    }
-    results.sort((a,b)=> b.score - a.score);
-    return results.slice(0,5);
-  }
-  async function computeTop5Equipe(equipe, startMs, endMs){
-    const usersSnap = await db.collection("users")
-      .where("role","==","corretor")
-      .where("aprovado","==",true)
-      .where("equipe","==",equipe)
-      .get();
-    const corretores = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    const results = [];
-    for(const c of corretores){
-      const leads = await getLeadsByPeriod({ startMs, endMs, filtros: { corretorId: c.uid } });
-      const st = computeStatsFromLeads(leads, startMs, endMs);
-      results.push({
-        corretor: c.nome || c.email || c.uid,
-        equipe: c.equipe || "",
-        score: scoreFromStats(st),
-        ...st
-      });
-    }
-    results.sort((a,b)=> b.score - a.score);
-    return results.slice(0,5);
-  }
-
-  function renderTopTable(title, arr){
-    if(!arr || arr.length === 0){
-      return `<div class="card"><b>${escapeHtml(title)}</b><div class="divider"></div><div class="muted small">Sem dados.</div></div>`;
-    }
-    return `
-      <div class="card">
-        <b>${escapeHtml(title)}</b>
-        <div class="divider"></div>
-        <div class="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Corretor</th><th>Equipe</th><th>Score</th><th>Agend</th><th>Prom</th><th>Atend</th><th>Tent</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${arr.map((r,i)=>`
-                <tr>
-                  <td>${i+1}</td>
-                  <td>${escapeHtml(r.corretor)}</td>
-                  <td>${escapeHtml(r.equipe)}</td>
-                  <td><b>${r.score}</b></td>
-                  <td>${r.agend}</td>
-                  <td>${r.promessa}</td>
-                  <td>${r.totalAtendidos}</td>
-                  <td>${r.totalLigacoes}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-        <div class="small muted" style="margin-top:10px">Score = (Agendamento x3) + (Promessa x2) + (Atendidos x0,5)</div>
-      </div>
-    `;
-  }
-
-  async function getCorretorNameById(uid){
-    if(!uid) return "";
-    const doc = await db.collection("users").doc(uid).get();
-    if(!doc.exists) return uid;
-    const d = doc.data() || {};
-    return d.nome || d.email || uid;
-  }
-
-  async function getMiniCrmForRole(role){
-    const me = state.userDoc;
-    const todayStart = dayStartMs(nowMs());
-    const todayEnd = dayEndMs(nowMs());
-
-    const snap = await db.collection("leads")
-      .where("atendeu","==",true)
-      .where("status","==","finalizado")
-      .get();
-
-    const all = snap.docs.map(d => ({id:d.id, ...d.data()}));
-    const today = all.filter(l => (l.timestampFinalizacao||0) >= todayStart && (l.timestampFinalizacao||0) <= todayEnd);
-    const important = today.filter(l => l.resultado === "AGENDAMENTO" || l.resultado === "PROMESSA DOCUMENTAÇÃO");
-
-    if(role === "corretor") return important.filter(l => l.corretorId === state.user.uid);
-    if(role === "gerente"){
-      const equipe = me.equipe || "equipe1";
-      return important.filter(l => l.equipe === equipe);
-    }
-    return important;
-  }
-
-  async function renderPainel(){
-    const user = state.user;
-    const me = state.userDoc;
-    const role = me.role;
-    const equipe = me.equipe || "equipe1";
-
-    let extra = "";
-    if(role === "corretor") extra = `<div>${activeBadge(!!me.ativo)}</div>`;
-    if(role === "gerente") extra = `<div class="pill">Equipe: ${escapeHtml(equipe)}</div>`;
-    if(role === "diretor") extra = `<div class="pill">DIRETORIA</div>`;
-
-    let html = renderHeader(user.email, role, extra);
-
-    if(role === "corretor"){
-      html += `
-        <div class="card">
-          <div><b>Status</b></div>
-          <div class="small muted">Somente corretores ATIVOS entram na distribuição geral.</div>
-          <div class="divider"></div>
-          <div class="grid2">
-            <button class="btn btnGreen" onclick="setMeActive(true)">🟢 ESTOU ATIVO</button>
-            <button class="btn btnRed" onclick="setMeActive(false)">🔴 PAUSAR</button>
-          </div>
-          <div class="divider"></div>
-          <div class="small muted">Equipe: <b>${escapeHtml(equipe)}</b></div>
-        </div>
-      `;
-    }
-
-    if(role === "diretor" || role === "gerente"){
-      const pend = await fetchPendingUsersForApprover();
-      html += `
-        <div class="card">
-          <b>Aprovações Pendentes</b>
-          <div class="small muted">Aprove aqui.</div>
-          <div class="divider"></div>
-          ${pend.length === 0 ? `<div class="muted small">Nenhum acesso pendente.</div>` : `
-            <div class="tableWrap">
-              <table>
-                <thead><tr><th>Nome</th><th>Email</th><th>Equipe</th><th>Role</th><th>Ação</th></tr></thead>
-                <tbody>
-                  ${pend.map(p=>`
-                    <tr>
-                      <td>${escapeHtml(p.nome||"")}</td>
-                      <td>${escapeHtml(p.email||"")}</td>
-                      <td>${escapeHtml(p.equipe||"")}</td>
-                      <td>${escapeHtml(p.role||"")}</td>
-                      <td>
-                        <button class="btn btnGreen" style="padding:10px;border-radius:12px;font-size:13px" onclick="approveAccess('${p.id}')">Aprovar</button>
-                        <button class="btn btnRed" style="padding:10px;border-radius:12px;font-size:13px;margin-top:6px" onclick="denyAccess('${p.id}')">Negar</button>
-                      </td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          `}
-        </div>
-      `;
-    }
-
-    $("app").innerHTML = html;
-  }
-
-  async function renderMiniCrm(){
-    const user = state.user;
-    const me = state.userDoc;
-    const role = me.role;
-    const equipe = me.equipe || "equipe1";
-
-    let extra = "";
-    if(role === "gerente") extra = `<div class="pill">Equipe: ${escapeHtml(equipe)}</div>`;
-    if(role === "diretor") extra = `<div class="pill">DIRETORIA</div>`;
-    if(role === "corretor") extra = `<div>${activeBadge(!!me.ativo)}</div>`;
-
-    let html = renderHeader(user.email, role, extra);
-
-    const arr = await getMiniCrmForRole(role);
-
-    let rowsHtml = "";
-    for(const l of arr){
-      const corr = await getCorretorNameById(l.corretorId);
-      if(role === "diretor"){
-        rowsHtml += `
-          <tr>
-            <td><b>${escapeHtml(l.resultado||"")}</b></td>
-            <td>${escapeHtml(corr)}</td>
-            <td>${escapeHtml(l.equipe||"")}</td>
-          </tr>
-        `;
-      }else{
-        rowsHtml += `
-          <tr>
-            <td>${escapeHtml(l.nome||"")}</td>
-            <td>${escapeHtml(l.telefone||"")}</td>
-            <td><b>${escapeHtml(l.resultado||"")}</b></td>
-            <td>${escapeHtml(corr)}</td>
-          </tr>
-        `;
-      }
-    }
-
-    html += `
-      <div class="card">
-        <b>Mini CRM (hoje)</b>
-        <div class="small muted">Somente <b>Agendamentos</b> e <b>Promessas</b>.</div>
-        <div class="divider"></div>
-
-        ${arr.length===0 ? `<div class="muted small">Nenhum registro hoje.</div>` : `
-          <div class="tableWrap">
-            <table>
-              <thead>
-                <tr>
-                  ${role==="diretor" ? `
-                    <th>Resultado</th><th>Corretor</th><th>Equipe</th>
-                  ` : `
-                    <th>Cliente</th><th>Contato</th><th>Resultado</th><th>Corretor</th>
-                  `}
-                </tr>
-              </thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
-          </div>
-        `}
-      </div>
-    `;
-
-    $("app").innerHTML = html;
-  }
-
-  async function renderResultados(){
-    const user = state.user;
-    const me = state.userDoc;
-    const role = me.role;
-    const equipe = me.equipe || "equipe1";
-
-    let extra = "";
-    if(role === "gerente") extra = `<div class="pill">Equipe: ${escapeHtml(equipe)}</div>`;
-    if(role === "diretor") extra = `<div class="pill">DIRETORIA</div>`;
-    if(role === "corretor") extra = `<div>${activeBadge(!!me.ativo)}</div>`;
-
-    let html = renderHeader(user.email, role, extra);
-
-    const today = nowMs();
-
-    html += `
-      <div class="card">
-        <b>Resultados</b>
-        <div class="small muted">Escolha período e gere rankings.</div>
-        <div class="divider"></div>
-
-        <div class="grid2">
-          <div>
-            <div class="fieldLabel">DE</div>
-            <input type="date" id="resDe" value="${toISODateInput(today)}"/>
-          </div>
-          <div>
-            <div class="fieldLabel">ATÉ</div>
-            <input type="date" id="resAte" value="${toISODateInput(today)}"/>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-        <button class="btn btnGold" onclick="calcResultados()">ATUALIZAR RESULTADOS</button>
-        <div class="divider"></div>
-
-        <div class="grid2">
-          <button class="btn btnBlue" onclick="baixarRelatorioExcel()">📊 BAIXAR RELATÓRIO (EXCEL)</button>
-          <button class="btn btnGhost" onclick="toggleSound()">🔊 SOM: <span id="soundLabel">${state.soundOn ? "ON" : "OFF"}</span></button>
-        </div>
-      </div>
-
-      <div id="resultArea"></div>
-    `;
-
-    $("app").innerHTML = html;
-    await calcResultados(true);
-  }
-
-  window.toggleSound = function(){
-    state.soundOn = !state.soundOn;
-    const el = $("soundLabel");
-    if(el) el.textContent = state.soundOn ? "ON" : "OFF";
-  };
-
-  window.calcResultados = async function(){
-    const de = $("resDe")?.value;
-    const ate = $("resAte")?.value;
-    const startBase = parseISODateInput(de) || nowMs();
-    const endBase = parseISODateInput(ate) || nowMs();
-    const startMs = dayStartMs(startBase);
-    const endMs = dayEndMs(endBase);
-
-    const role = state.userDoc.role;
-    const equipe = state.userDoc.equipe || "equipe1";
-
-    const topEmpresa = await computeTop5Empresa(startMs, endMs);
-    const topEquipe = await computeTop5Equipe(equipe, startMs, endMs);
-
-    let areaHtml = "";
-    areaHtml += renderTopTable("Top 5 • Empresa", topEmpresa);
-    if(role !== "diretor"){
-      areaHtml += renderTopTable("Top 5 • Sua Equipe", topEquipe);
-    }
-
-    const area = $("resultArea");
-    if(area) area.innerHTML = areaHtml;
-  };
-
-  window.baixarRelatorioExcel = async function(){
-    const de = $("resDe")?.value;
-    const ate = $("resAte")?.value;
-    const startBase = parseISODateInput(de) || nowMs();
-    const endBase = parseISODateInput(ate) || nowMs();
-    const startMs = dayStartMs(startBase);
-    const endMs = dayEndMs(endBase);
-
-    const role = state.userDoc.role;
-    const equipe = state.userDoc.equipe || "equipe1";
-
-    let filtros = {};
-    if(role === "corretor") filtros.corretorId = state.user.uid;
-    if(role === "gerente") filtros.equipe = equipe;
-
-    const leads = await getLeadsByPeriod({ startMs, endMs, filtros });
-    const st = computeStatsFromLeads(leads, startMs, endMs);
-
-    const resumo = [
-      ["PROEFI - ALVENA", ""],
-      ["Perfil", role],
-      ["Usuário", state.user.email],
-      ["Equipe", equipe],
-      ["Período DE", de || ""],
-      ["Período ATÉ", ate || ""],
-      ["Total tentativas", st.totalLigacoes],
-      ["Total não atendeu", st.totalNaoAtendeu],
-      ["Total atendidos", st.totalAtendidos],
-      ["Agendamentos", st.agend],
-      ["Promessas", st.promessa],
-      ["Gerado em", new Date().toLocaleString()]
-    ];
-
-    const atendidos = leads.filter(l => l.atendeu === true).map(l => ({
-      Cliente: l.nome || "",
-      Telefone: l.telefone || "",
-      Email: l.email || "",
-      Resultado: l.resultado || "",
-      "Data/Hora Agendada": l.dataAgendada || "",
-      Feedback: l.observacao || "",
-      "CorretorId": l.corretorId || "",
-      "Equipe": l.equipe || ""
-    }));
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumo), "Resumo");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(atendidos), "Atendidos");
-    XLSX.writeFile(wb, `PROEFI_RELATORIO_${role}_${(de||"DE")}_A_${(ate||"ATE")}.xlsx`);
-  };
-
-  async function renderConfig(){
-    const user = state.user;
-    const me = state.userDoc;
-    const role = me.role;
-    const equipe = me.equipe || "equipe1";
-
-    let extra = "";
-    if(role === "gerente") extra = `<div class="pill">Equipe: ${escapeHtml(equipe)}</div>`;
-    if(role === "diretor") extra = `<div class="pill">DIRETORIA</div>`;
-    if(role === "corretor") extra = `<div>${activeBadge(!!me.ativo)}</div>`;
-
-    let html = renderHeader(user.email, role, extra);
-
-    if(role === "corretor"){
-      html += `
-        <div class="card">
-          <div><b>Mensagem Padrão</b></div>
-          <div class="small muted">Use: {{nome}} {{telefone}} {{email}}</div>
-          <div class="divider"></div>
-          <textarea id="msgPadrao">${escapeHtml(me.mensagemPadrao || "")}</textarea>
-          <button class="btn btnBlue" onclick="salvarMensagemPadrao()">SALVAR</button>
-        </div>
-      `;
-    }
-
-    if(role === "gerente"){
-      html += `
-        <div class="card">
-          <div><b>Upload • Lista do Gerente</b></div>
-          <div class="small muted">Fila para equipe (${escapeHtml(equipe)}).</div>
-          <div class="divider"></div>
-          <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
-          <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR</button>
-        </div>
-      `;
-    }
-
-    if(role === "diretor"){
-      html += `
-        <div class="card">
-          <div><b>Upload • Lista Geral</b></div>
-          <div class="small muted">Distribui aleatoriamente para corretores ATIVOS.</div>
-          <div class="divider"></div>
-          <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
-          <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
-        </div>
-      `;
-    }
-
-    $("app").innerHTML = html;
-  }
-
-  window.salvarMensagemPadrao = async function(){
-    const msg = $("msgPadrao").value || "";
-    await db.collection("users").doc(state.user.uid).update({ mensagemPadrao: msg });
-    state.userDoc = await getUserDoc(state.user.uid);
-    alert("Mensagem salva!");
-  };
-
-  window.uploadListaGeral = async function(){
-    const file = $("fileDiretor")?.files?.[0];
-    if(!file) return alert("Selecione um arquivo.");
-    if(state.userDoc.role !== "diretor") return alert("Apenas DIRETOR.");
-
-    const r = await uploadLeadsFromFile({
-      file, origem:"geral", equipe:null, donoUploadUid:state.user.uid, distribuirGeralAgora:true
-    });
-    alert(`Lista geral enviada! Total: ${r.total}.`);
-    $("fileDiretor").value = "";
-  };
-
-  window.uploadListaGerente = async function(){
-    const file = $("fileGerente")?.files?.[0];
-    if(!file) return alert("Selecione um arquivo.");
-    if(state.userDoc.role !== "gerente") return alert("Apenas GERENTE.");
-
-    const equipe = state.userDoc.equipe || "equipe1";
-    const r = await uploadLeadsFromFile({
-      file, origem:"gerente", equipe, donoUploadUid:state.user.uid, distribuirGeralAgora:false
-    });
-    alert(`Lista da equipe enviada! Total: ${r.total}.`);
-    $("fileGerente").value = "";
-  };
-
-  async function renderAtendimento(){
-    const user = state.user;
-    const me = state.userDoc;
-    const equipe = me.equipe || "equipe1";
-
-    let html = renderHeader(user.email, "corretor", `<div>${activeBadge(!!me.ativo)}</div>`);
-
-    if(!me.ativo){
-      html += `<div class="card"><div class="danger">Você está PAUSADO.</div><div class="small muted">Ative no Painel.</div></div>`;
-      $("app").innerHTML = html;
-      return;
-    }
-
-    html += `
-      <div class="card">
-        <div><b>Fonte de Leads</b></div>
-        <div class="divider"></div>
-        <select id="leadSource" onchange="onChangeLeadSource()">
-          <option value="geral">Lista Geral</option>
-          <option value="gerente">Lista do Gerente</option>
-          <option value="minha">Minha Lista</option>
-        </select>
-        <div class="divider"></div>
-        <button class="btn btnGold" onclick="pegarProximoLead()">PEGAR PRÓXIMO</button>
-        <div class="small muted" style="margin-top:10px">Equipe: <b>${escapeHtml(equipe)}</b></div>
-      </div>
-
-      <div class="card" id="leadArea">
-        <div class="center muted">Nenhum lead em atendimento.</div>
-      </div>
-    `;
-
-    $("app").innerHTML = html;
-    $("leadSource").value = state.leadSource || "geral";
-  }
-
-  window.onChangeLeadSource = function(){
-    const sel = $("leadSource");
-    if(sel) state.leadSource = sel.value;
-  };
-
-  window.pegarProximoLead = async function(){
-    if(state.leadAtualRef) return alert("Finalize o lead atual antes.");
-
-    const me = state.userDoc;
-    const source = $("leadSource") ? $("leadSource").value : (state.leadSource || "geral");
-    const picked = await pickNextLeadForCorretor({
-      source, corretorUid: state.user.uid, equipeCorretor: me.equipe || "equipe1"
-    });
-
-    if(!picked) return alert("Sem leads nessa fonte.");
-    state.leadAtualRef = picked.ref;
-    state.leadAtualData = picked.data;
-
-    await renderLeadInArea();
-  };
-
-  async function renderLeadInArea(){
-    const lead = state.leadAtualData;
-    const area = $("leadArea");
-    if(!area || !lead) return;
-
-    const snap = await db.collection("users").doc(state.user.uid).get();
-    const userAtual = snap.exists ? (snap.data() || {}) : {};
-    const telClean = cleanPhone(lead.telefone);
-
-    const msgBase  = userAtual.mensagemPadrao || "";
-    const msgFinalRaw = templateMessage(msgBase, lead);
-    const msgFinal = encodeURIComponent(msgFinalRaw);
-
-    area.innerHTML = `
-      <div><b>${escapeHtml(lead.nome || "Sem nome")}</b></div>
-      <div class="small muted">${escapeHtml(lead.telefone || "")} • ${escapeHtml(lead.email || "")}</div>
-      <div class="divider"></div>
-
-      <div class="grid3">
-        <a href="tel:${telClean}"><button class="btn btnBlue">📞 LIGAR</button></a>
-        <a href="sms:${telClean}?body=${msgFinal}"><button class="btn btnBlue">📩 SMS</button></a>
-        <a href="mailto:${encodeURIComponent(lead.email || "")}?subject=${encodeURIComponent("PROEFI - ALVENA")}&body=${msgFinal}">
-          <button class="btn btnBlue">📧 EMAIL</button>
-        </a>
-      </div>
-
-      <a href="https://wa.me/55${telClean}?text=${msgFinal}" target="_blank">
-        <button class="btn btnBlue" style="margin-top:10px">💬 WHATSAPP</button>
-      </a>
-
-      <div class="divider"></div>
-      <div class="grid2">
-        <button class="btn btnGreen" onclick="finalizarSim('AGENDAMENTO')">AGENDOU</button>
-        <button class="btn btnGold" onclick="finalizarSim('PROMESSA DOCUMENTAÇÃO')">PROMESSA</button>
-      </div>
-      <button class="btn btnRed" style="margin-top:10px" onclick="finalizarNao()">NÃO ATENDEU</button>
-    `;
-  }
-
-  window.finalizarNao = async function(){
-    await state.leadAtualRef.update({
-      status: "fila",
-      corretorId: (state.leadAtualData.origem === "geral") ? state.user.uid : null,
-      emAtendimentoEm: null,
-      timestampDistribuicao: null,
-      timestampFinalizacao: null,
-      atendeu: false,
-      resultado: null,
-      observacao: null,
-      dataAgendada: null,
-      atualizadoEm: nowMs()
-    });
-    state.leadAtualRef = null;
-    state.leadAtualData = null;
-    $("leadArea").innerHTML = `<div class="center muted">Devolvido para fila.</div>`;
-  };
-
-  window.finalizarSim = async function(tipo){
-    await state.leadAtualRef.update({
-      status: "finalizado",
-      atendeu: true,
-      resultado: tipo,
-      timestampFinalizacao: nowMs(),
-      atualizadoEm: nowMs()
-    });
-
-    if(tipo === "AGENDAMENTO" || tipo === "PROMESSA DOCUMENTAÇÃO") playCash();
-
-    state.leadAtualRef = null;
-    state.leadAtualData = null;
-    $("leadArea").innerHTML = `<div class="center ok">Finalizado!</div>`;
-  };
-
-  async function renderApp(){
-    const me = state.userDoc;
-    if(!me) return;
-
-    setTabsForRole(me.role);
-
-    if(me.role !== "corretor" && state.tab === "atend"){
-      state.tab = "painel";
-      updateNavActive();
-    }
-
-    if(state.tab === "painel") return renderPainel();
-    if(state.tab === "mini") return renderMiniCrm();
-    if(state.tab === "result") return renderResultados();
-    if(state.tab === "config") return renderConfig();
-    if(state.tab === "atend") return renderAtendimento();
-    return renderPainel();
-  }
-
-  auth.onAuthStateChanged(async (user)=>{
-    state.user = user;
-
-    if(!user){
-      state.userDoc = null;
-      state.tab = "painel";
-      state.leadAtualRef = null;
-      state.leadAtualData = null;
-      renderLogin();
-      return;
-    }
-
-    const userRef = db.collection("users").doc(user.uid);
-    const snap = await userRef.get();
-
-    if(!snap.exists){
-      await userRef.set({
-        email: user.email || "",
-        nome: "",
-        equipe: "equipe1",
-        role: isMasterDirectorEmail(user.email) ? "diretor" : "corretor",
-        aprovado: isMasterDirectorEmail(user.email),
-        aprovadoEm: isMasterDirectorEmail(user.email) ? nowMs() : null,
-        aprovadoPor: isMasterDirectorEmail(user.email) ? "MASTER" : null,
-        ativo: false,
-        ativoAtualizadoEm: nowMs(),
-        mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
-        emailRelatorio: "",
-        criadoEm: nowMs()
-      });
-    }
-
-    state.userDoc = await getUserDoc(user.uid);
-
-    if(isMasterDirectorEmail(user.email)){
-      if(state.userDoc.role !== "diretor" || state.userDoc.aprovado !== true){
-        await userRef.update({ role:"diretor", aprovado:true, aprovadoEm: nowMs(), aprovadoPor:"MASTER" });
-        state.userDoc = await getUserDoc(user.uid);
-      }
-    }
-
-    if(!state.userDoc.aprovado){
-      renderPendingApproval();
-      return;
-    }
-
-    await renderApp();
+  html += `</div>`;
+  $("app").innerHTML = html;
+}
+
+async function renderResultados(){
+  const html = `
+  <div class="card"><h2>Resultados</h2>
+  <div class="row row-2">
+    <input type="date" id="de"/>
+    <input type="date" id="ate"/>
+  </div>
+  <button class="btn btn-primary" onclick="gerarRelatorio()">Gerar relatório (Excel)</button>
+  </div>
+  <div class="card table-wrap"><table id="tbl">
+    <thead><tr><th>Corretor</th><th>Atendidos</th><th>Agend.</th><th>Promessas</th><th>Pontos</th></tr></thead>
+    <tbody></tbody>
+  </table></div>`;
+  $("app").innerHTML = html;
+  await fillRanking();
+}
+
+async function fillRanking(){
+  const top = await computeTop();
+  const tbody = document.querySelector("#tbl tbody");
+  tbody.innerHTML="";
+  top.forEach(t=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${t.name}</td><td>${t.atendidos}</td><td>${t.ag}</td><td>${t.pr}</td><td>${t.points}</td>`;
+    tbody.appendChild(tr);
   });
 }
+
+async function computeTop(){
+  const q = await db.collection("leads").where("atendeu","==",true).get();
+  const map={};
+  q.forEach(d=>{
+    const x=d.data();
+    const id=x.corretorId||"sem";
+    if(!map[id]) map[id]={name:id,atendidos:0,ag:0,pr:0,points:0};
+    map[id].atendidos++;
+    if(x.resultado==="AGENDAMENTO"){map[id].ag++; map[id].points+=5;}
+    if(x.resultado==="PROMESSA DOCUMENTAÇÃO"){map[id].pr++; map[id].points+=2;}
+  });
+  return Object.values(map).sort((a,b)=>b.points-a.points).slice(0,5);
+}
+
+async function gerarRelatorio(){
+  const top = await computeTop();
+  const ws = XLSX.utils.json_to_sheet(top);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Resultados");
+  XLSX.writeFile(wb,"proefi_resultados.xlsx");
+}
+
+async function renderConfig(){
+  const p=state.profile;
+  let html = `<div class="card"><h2>Configurações</h2>
+  <textarea id="msg">${p.mensagemPadrao||""}</textarea>
+  <button class="btn btn-primary" onclick="saveMsg()">Salvar mensagem padrão</button>
+  </div>`;
+
+  if(p.role==="diretor" || p.role==="gerente" || p.role==="corretor"){
+    html += `<div class="card"><h3>Upload de lista (A:Nome B:Telefone C:Email)</h3>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv"/>
+      <button class="btn btn-secondary" onclick="uploadLista()">Enviar</button>
+      <div class="small">Distribuição simples para fila.</div>
+    </div>`;
+  }
+  $("app").innerHTML = html;
+}
+
+async function saveMsg(){
+  await db.collection("users").doc(state.user.uid).set({mensagemPadrao:$("msg").value},{merge:true});
+  alert("Mensagem salva.");
+}
+
+function parseSheet(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data,{type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws,{header:1});
+        resolve(json);
+      }catch(err){ reject(err); }
+    };
+    reader.onerror=reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function uploadLista(){
+  const f = $("file").files[0];
+  if(!f){ alert("Escolha um arquivo."); return; }
+  const rows = await parseSheet(f);
+  let count=0;
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r || !r[0]) continue;
+    await db.collection("leads").add({
+      nome:r[0]||"",
+      telefone:r[1]||"",
+      email:r[2]||"",
+      status:"fila",
+      createdAt:Date.now()
+    });
+    count++;
+  }
+  alert(`Lista enviada: ${count} leads.`);
+}
+
+async function logout(){
+  try{ await auth.signOut(); }catch(e){}
+}
+
+auth.onAuthStateChanged(async user=>{
+  state.user=user;
+  if(!user){ state.profile=null; showLogin(); return; }
+  state.profile = await loadProfile(user.uid);
+  state.loginAt = Date.now();
+  setTab('painel');
+});
 </script>
 </body>
 </html>
