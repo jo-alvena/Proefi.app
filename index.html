@@ -645,6 +645,8 @@ function makeLeadDoc(base){
     timestampDistribuicao: null,
     timestampFinalizacao: null,
 
+    cooldownAte: null, // ✅ NOVO: bloqueia reaparecer por alguns minutos
+
     atendeu: null,
     resultado: null,
     observacao: null,
@@ -754,10 +756,20 @@ async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equ
     q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
   }
 
+  // ✅ Filtra cooldown no JS (sem precisar índice composto)
   const snap = await q.limit(25).get();
   if(snap.empty) return null;
 
-  const chosenDoc = snap.docs[0];
+  const agora = nowMs();
+
+  const chosenDoc = snap.docs.find(d=>{
+    const x = d.data() || {};
+    const cd = x.cooldownAte;
+    return !cd || typeof cd !== "number" || cd <= agora;
+  });
+
+  if(!chosenDoc) return null;
+
   const ref = chosenDoc.ref;
   const data = chosenDoc.data();
 
@@ -766,12 +778,15 @@ async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equ
     corretorId: corretorUid,
     corretorEmail: corretorEmail || null,
     equipe: data.equipe || equipeCorretor || null,
-    emAtendimentoEm: nowMs(),
-    timestampDistribuicao: nowMs(),
-    atualizadoEm: nowMs(),
+    emAtendimentoEm: agora,
+    timestampDistribuicao: agora,
+    atualizadoEm: agora,
+
+    cooldownAte: null, // ✅ limpa ao entrar em atendimento
+
     totalTentativas: firebase.firestore.FieldValue.increment(1),
     [`tentativasPorCorretor.${corretorUid}`]: firebase.firestore.FieldValue.increment(1),
-    [`_lastTryDayByCorretor.${corretorUid}`]: dayKey(nowMs())
+    [`_lastTryDayByCorretor.${corretorUid}`]: dayKey(agora)
   });
 
   const fresh = await ref.get();
@@ -1188,10 +1203,17 @@ window.uiNaoAtendeu = async function(){
   const ok = await openModal("Confirmar", "Marcar como NÃO ATENDEU e devolver para fila?");
   if(!ok) return;
 
+  // ✅ COOLDOWN: não volta a aparecer por alguns minutos
+  const COOLDOWN_MINUTOS = 5; // ajuste aqui (ex.: 2, 3, 10)
+  const cooldownAte = nowMs() + (COOLDOWN_MINUTOS * 60 * 1000);
+
   await leadAtualRef.update({
     status: "fila",
     corretorId: (leadAtualData.origem === "geral") ? user.uid : null,
     corretorEmail: (leadAtualData.origem === "geral") ? user.email : null,
+
+    cooldownAte: cooldownAte, // ✅ NOVO
+
     emAtendimentoEm: null,
     timestampFinalizacao: null,
     atendeu: false,
