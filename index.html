@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PROEFI - ALVENA</title>
+  <title>PROEFI ULTRA</title>
 
   <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -180,36 +180,6 @@
       border-color: rgba(188,138,11,0.62);
     }
 
-    /* Mini CRM list */
-    .list{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .item{
-      border: 1px solid rgba(33,52,108,0.12);
-      border-radius: 14px;
-      padding: 12px;
-      background: rgba(33,52,108,0.03);
-    }
-    .itemTop{
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
-    }
-    .tag{
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:900;
-      background: rgba(33,52,108,0.10);
-    }
-    .tagAg{ background: rgba(185,246,202,0.8); }
-    .tagPr{ background: rgba(188,138,11,0.18); }
-    .tagSi{ background: rgba(255,204,203,0.8); }
-
     .tableWrap{
       overflow-x:auto;
       -webkit-overflow-scrolling: touch;
@@ -324,6 +294,14 @@ const db   = firebase.firestore();
 const MASTER_DIRECTOR_EMAIL = "jo.alvenasolucoes@gmail.com";
 
 /** =========================
+ *  ECONOMIA / REGRAS
+ *  ========================= */
+const TTL_LEADS_DIAS = 10;         // TTL para leads/listas
+const TTL_STATS_DIAS = 30;         // stats guarda mais um pouco (baixo mesmo assim)
+const RANKING_RELEASE_HOUR = 19;   // após 19h
+const DAILY_VIEW_KEY_PREFIX = "PROEFI_ULTRA_VIEW_"; // localStorage
+
+/** =========================
  *  STATE
  *  ========================= */
 let leadAtualRef = null;
@@ -331,7 +309,7 @@ let leadAtualData = null;
 let detailsOpen = false;
 
 let currentTab = "painel";
-let cachedUserData = null;   // ✅ cache do usuário (reduz leituras)
+let cachedUserData = null;   // cache do usuário
 let cachedAuthUser = null;
 
 let modalResolve = null;
@@ -342,7 +320,6 @@ let modalResolve = null;
 function $(id){ return document.getElementById(id); }
 function nowMs(){ return Date.now(); }
 function safe(v){ return (v===undefined || v===null) ? "" : String(v); }
-function cleanPhone(raw){ return String(raw||"").replace(/\D/g,''); }
 
 function dayKey(ts){
   const d = new Date(ts);
@@ -351,6 +328,52 @@ function dayKey(ts){
   const da = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${da}`;
 }
+
+function localHour(){
+  try{ return new Date().getHours(); }catch(e){ return 0; }
+}
+
+function isAfterReleaseHour(){
+  return localHour() >= RANKING_RELEASE_HOUR;
+}
+
+function viewKeyFor(uid, feature, day){
+  return `${DAILY_VIEW_KEY_PREFIX}${uid}__${feature}__${day}`;
+}
+
+function canViewOncePerDay({ uid, role, feature }){
+  // diretor: livre
+  if(role === "diretor") return { ok:true, reason:"" };
+
+  const today = dayKey(nowMs());
+  if(!isAfterReleaseHour()){
+    return { ok:false, reason:`Liberado apenas após ${RANKING_RELEASE_HOUR}h.` };
+  }
+
+  const k = viewKeyFor(uid, feature, today);
+  const seen = localStorage.getItem(k);
+  if(seen === "1"){
+    return { ok:false, reason:`Você já consultou ${feature} hoje.` };
+  }
+
+  // marca como visto
+  localStorage.setItem(k, "1");
+  return { ok:true, reason:"" };
+}
+
+function cleanPhone(raw){
+  return String(raw||"").replace(/\D/g,'');
+}
+
+function normalizePhone(raw){
+  const d = cleanPhone(raw);
+  // não força DDD, só exige mínimo
+  if(d.length < 10) return "";
+  // evita números absurdos
+  if(d.length > 13) return d.slice(-13);
+  return d;
+}
+
 function timeMin(ms){ return Math.max(0, Math.floor(ms/60000)); }
 
 function toISODateInput(ts){
@@ -360,22 +383,17 @@ function toISODateInput(ts){
   const da = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${da}`;
 }
-function isoDaysAgo(days){
-  const d = new Date();
-  d.setDate(d.getDate() - Number(days || 0));
-  return toISODateInput(d.getTime());
-}
+
 function rangeToTs(dateStr, end=false){
   const [y,m,d] = dateStr.split("-").map(n=>parseInt(n,10));
   if(!end) return new Date(y, m-1, d, 0,0,0,0).getTime();
   return new Date(y, m-1, d, 23,59,59,999).getTime();
 }
-function daysBetweenISO(de, ate){
-  try{
-    const a = rangeToTs(de, false);
-    const b = rangeToTs(ate, true);
-    return Math.max(1, Math.ceil((b-a+1) / (24*60*60*1000)));
-  }catch(e){ return 1; }
+
+function addDays(ts, days){
+  const d = new Date(ts);
+  d.setDate(d.getDate() + Number(days||0));
+  return d.getTime();
 }
 
 function templateMessage(msg, lead){
@@ -388,9 +406,8 @@ function templateMessage(msg, lead){
     .replaceAll("{{email}}", em);
 }
 
-// ✅ Link SMS mais compatível em Android
+// Link SMS mais compatível em Android
 function buildSmsHref(telClean, encodedText){
-  // muitos Android aceitam melhor "?&body="
   return `sms:${telClean}?&body=${encodedText}`;
 }
 
@@ -431,13 +448,132 @@ function closeModal(ok){
 }
 
 /** =========================
+ *  STATS DIÁRIO (economia)
+ *  =========================
+ * Coleção: statsDiario
+ * Doc: CORRETOR__YYYY-MM-DD__<uid>
+ *      EMPRESA__YYYY-MM-DD
+ * Fields: day, tipo, corretorId, equipe, nome, email, tentativas, atendidos, ag, pr, si, interessado, pontos
+ */
+function statsDocIdCorretor(day, uid){ return `CORRETOR__${day}__${uid}`; }
+function statsDocIdEmpresa(day){ return `EMPRESA__${day}`; }
+
+function pointsForResult(res){
+  if(res === "AGENDAMENTO") return 10;
+  if(res === "PROMESSA DOCUMENTAÇÃO") return 6;
+  if(res === "INTERESSADO") return 2;             // novo
+  if(res === "NÃO GEROU INTERESSE") return 1;
+  return 0;
+}
+
+async function bumpStatsAttempt({ day, uid, equipe, nome, email }){
+  const docId = statsDocIdCorretor(day, uid);
+  const empId = statsDocIdEmpresa(day);
+
+  const expireAt = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_STATS_DIAS));
+
+  const baseCor = {
+    day,
+    tipo: "CORRETOR",
+    corretorId: uid,
+    equipe: equipe || "equipe1",
+    nome: nome || "",
+    email: email || "",
+    kindDay: `CORRETOR__${day}`,
+    atualizadoEm: nowMs(),
+    expireAt
+  };
+
+  const baseEmp = {
+    day,
+    tipo: "EMPRESA",
+    kindDay: `EMPRESA__${day}`,
+    atualizadoEm: nowMs(),
+    expireAt
+  };
+
+  const inc = firebase.firestore.FieldValue.increment(1);
+
+  // 2 writes baratas (1 doc corretor + 1 doc empresa)
+  await Promise.all([
+    db.collection("statsDiario").doc(docId).set({
+      ...baseCor,
+      tentativas: inc
+    }, { merge:true }),
+    db.collection("statsDiario").doc(empId).set({
+      ...baseEmp,
+      tentativas: inc
+    }, { merge:true })
+  ]);
+}
+
+async function bumpStatsFinalize({ day, uid, equipe, nome, email, resultado }){
+  const docId = statsDocIdCorretor(day, uid);
+  const empId = statsDocIdEmpresa(day);
+  const expireAt = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_STATS_DIAS));
+
+  const baseCor = {
+    day,
+    tipo: "CORRETOR",
+    corretorId: uid,
+    equipe: equipe || "equipe1",
+    nome: nome || "",
+    email: email || "",
+    kindDay: `CORRETOR__${day}`,
+    atualizadoEm: nowMs(),
+    expireAt
+  };
+
+  const baseEmp = {
+    day,
+    tipo: "EMPRESA",
+    kindDay: `EMPRESA__${day}`,
+    atualizadoEm: nowMs(),
+    expireAt
+  };
+
+  const inc = firebase.firestore.FieldValue.increment(1);
+  const pts = pointsForResult(resultado);
+  const incPts = firebase.firestore.FieldValue.increment(pts);
+
+  const patchByRes = {};
+  if(resultado === "AGENDAMENTO") patchByRes.ag = inc;
+  else if(resultado === "PROMESSA DOCUMENTAÇÃO") patchByRes.pr = inc;
+  else if(resultado === "INTERESSADO") patchByRes.interessado = inc;
+  else if(resultado === "NÃO GEROU INTERESSE") patchByRes.si = inc;
+
+  // atendidos sempre soma 1 no finalize
+  const patch = {
+    ...patchByRes,
+    atendidos: inc,
+    pontos: incPts
+  };
+
+  await Promise.all([
+    db.collection("statsDiario").doc(docId).set({ ...baseCor, ...patch }, { merge:true }),
+    db.collection("statsDiario").doc(empId).set({ ...baseEmp, ...patch }, { merge:true })
+  ]);
+}
+
+async function fetchStatsCorretorHoje(){
+  const day = dayKey(nowMs());
+  const snap = await db.collection("statsDiario")
+    .where("kindDay","==",`CORRETOR__${day}`)
+    .get();
+
+  const arr = [];
+  snap.forEach(d=> arr.push({ id:d.id, ...(d.data()||{}) }));
+  return arr;
+}
+
+/** =========================
  *  UI BASE
  *  ========================= */
 function renderBrand(){
   return `
     <div class="brand">
-      <h1>PROEFI - ALVENA</h1>
-      <div class="sub">Produção Eficiente<br/>Alvena Soluções Imobiliária</div>
+      <h1>PROEFI ULTRA</h1>
+      <div class="sub">Produção Eficiente<br/>Imobiliária Alvena</div>
     </div>
   `;
 }
@@ -585,7 +721,6 @@ window.doSignup = async function(){
       ativo: false,
       ativoAtualizadoEm: nowMs(),
       mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
-      emailRelatorio: "",
       criadoEm: nowMs()
     });
 
@@ -614,7 +749,7 @@ function renderPendingApproval(){
 window.logout = async function(){ await auth.signOut(); };
 
 /** =========================
- *  LEADS: upload/import
+ *  LEADS: upload/import (dedup no arquivo)
  *  ========================= */
 function parseSheetRows(workbook){
   const sheetName = workbook.SheetNames[0];
@@ -638,11 +773,14 @@ function mapLeadColumns(row){
   const email = String(row[2] || "").trim();
   return { nome, telefone, email };
 }
+
 function makeLeadDoc(base){
   const ts = nowMs();
+  const exp = firebase.firestore.Timestamp.fromMillis(addDays(ts, TTL_LEADS_DIAS));
   return {
     nome: base.nome || "",
     telefone: base.telefone || "",
+    telefoneNorm: normalizePhone(base.telefone || ""),
     email: base.email || "",
     status: "fila",
     corretorId: null,
@@ -659,12 +797,7 @@ function makeLeadDoc(base){
     timestampDistribuicao: null,
     timestampFinalizacao: null,
 
-    // ✅ NOVO: ordenação da fila (usada no JS, sem exigir índice composto)
-    // menor = mais antigo (atende antes). Quando "NÃO ATENDEU", vira "agora" => vai pro fim.
     filaOrdem: ts,
-
-    // Mantive o campo por compatibilidade (mas não usamos mais para voltar em 5 min)
-    cooldownAte: null,
 
     atendeu: null,
     resultado: null,
@@ -673,10 +806,13 @@ function makeLeadDoc(base){
 
     totalTentativas: 0,
     tentativasPorCorretor: {},
+
+    // TTL
+    expireAt: exp
   };
 }
 
-async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distribuirGeralAgora }){
+async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
   const rows = parseSheetRows(workbook);
@@ -685,43 +821,45 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
   const headerIndex = detectHeaderRow(rows);
   const dataRows = rows.slice(headerIndex + 1);
 
+  // 1) parse
   const parsed = [];
   for(const r of dataRows){
     const lead = mapLeadColumns(r);
-    if(!lead.nome && !lead.telefone && !lead.email) continue;
-    if(!lead.telefone) continue;
-    parsed.push(lead);
+    const telN = normalizePhone(lead.telefone);
+    if(!telN) continue;
+    parsed.push({ ...lead, telefoneNorm: telN });
   }
   if(parsed.length === 0) throw new Error("Nenhum lead válido (verifique colunas A/B/C).");
 
+  // 2) dedup no arquivo (SEM leitura no Firestore)
+  const uniqMap = new Map();
+  for(const p of parsed){
+    if(!uniqMap.has(p.telefoneNorm)){
+      uniqMap.set(p.telefoneNorm, p);
+    }
+  }
+  const uniq = Array.from(uniqMap.values());
+
+  // lista doc com TTL
+  const exp = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_LEADS_DIAS));
   const listaDoc = await db.collection("listas").add({
     origem,
     equipe: equipe || null,
     donoUpload: donoUploadUid,
     arquivoNome: file.name,
-    total: parsed.length,
-    criadoEm: nowMs()
+    totalRecebido: parsed.length,
+    totalUnico: uniq.length,
+    criadoEm: nowMs(),
+    expireAt: exp
   });
   const listaRefId = listaDoc.id;
 
-  let corretoresAtivos = [];
-  if(origem === "geral" && distribuirGeralAgora){
-    const snap = await db.collection("users")
-      .where("role","==","corretor")
-      .where("aprovado","==",true)
-      .where("ativo","==",true)
-      .get();
-    corretoresAtivos = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    if(corretoresAtivos.length === 0){
-      throw new Error("Nenhum corretor ATIVO agora. Peça para clicarem 'ESTOU ATIVO' antes do upload geral.");
-    }
-  }
-
+  // 3) grava em batch (SEM distribuir geral)
   const batchSize = 350;
   let idx = 0;
-  while(idx < parsed.length){
+  while(idx < uniq.length){
     const batch = db.batch();
-    const slice = parsed.slice(idx, idx + batchSize);
+    const slice = uniq.slice(idx, idx + batchSize);
     for(const leadBase of slice){
       const docRef = db.collection("leads").doc();
       const doc = makeLeadDoc(leadBase);
@@ -731,12 +869,10 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
       doc.donoUpload = donoUploadUid;
       doc.listaRef = listaRefId;
 
-      if(origem === "geral" && distribuirGeralAgora){
-        const chosen = corretoresAtivos[Math.floor(Math.random() * corretoresAtivos.length)];
-        doc.corretorId = chosen.uid;
-        doc.corretorEmail = chosen.email || null;
-        doc.status = "fila";
-      }
+      // geral agora é "bolsão": corretorId fica null
+      doc.corretorId = null;
+      doc.corretorEmail = null;
+      doc.status = "fila";
 
       batch.set(docRef, doc);
     }
@@ -744,7 +880,7 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid, distri
     idx += batchSize;
   }
 
-  return { total: parsed.length, listaRefId };
+  return { totalRecebido: parsed.length, totalUnico: uniq.length, listaRefId };
 }
 
 /** =========================
@@ -762,28 +898,27 @@ function activeBadge(ativo){
 }
 
 /** =========================
- *  Lead picking (sem exigir índice composto)
+ *  Lead picking
  *  ========================= */
 function leadSortValue(x){
-  // menor => vem primeiro. Se não existir, cai para criadoEm.
   const fo = (x && typeof x.filaOrdem === "number") ? x.filaOrdem : null;
   if(typeof fo === "number") return fo;
   const ce = (x && typeof x.criadoEm === "number") ? x.criadoEm : 0;
   return ce || 0;
 }
 
-async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equipeCorretor }){
+async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equipeCorretor, corretorNome }){
   let q = db.collection("leads").where("status","==","fila");
 
+  // ✅ GERAL agora é "bolsão" (não depende de upload distribuir)
   if(source === "geral"){
-    q = q.where("origem","==","geral").where("corretorId","==",corretorUid);
+    q = q.where("origem","==","geral").where("corretorId","==",null);
   }else if(source === "gerente"){
     q = q.where("origem","==","gerente").where("equipe","==",equipeCorretor).where("corretorId","==",null);
   }else{
     q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
   }
 
-  // ✅ Sem cooldown e sem orderBy (evita índices). Pegamos um lote e ordenamos no JS.
   const snap = await q.limit(40).get();
   if(snap.empty) return null;
 
@@ -797,7 +932,9 @@ async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equ
   const data = chosen.data;
 
   const agora = nowMs();
+  const today = dayKey(agora);
 
+  // update lead (sem ref.get depois)
   await ref.update({
     status: "em_atendimento",
     corretorId: corretorUid,
@@ -807,16 +944,33 @@ async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equ
     timestampDistribuicao: agora,
     atualizadoEm: agora,
 
-    cooldownAte: null,
-
     totalTentativas: firebase.firestore.FieldValue.increment(1),
     [`tentativasPorCorretor.${corretorUid}`]: firebase.firestore.FieldValue.increment(1),
-    [`_lastTryDayByCorretor.${corretorUid}`]: dayKey(agora)
+    [`_lastTryDayByCorretor.${corretorUid}`]: today
   });
 
-  // Uma leitura para pegar o doc atualizado (mantive para garantir consistência)
-  const fresh = await ref.get();
-  return { ref, data: fresh.data() };
+  // ✅ stats barato
+  bumpStatsAttempt({
+    day: today,
+    uid: corretorUid,
+    equipe: (data.equipe || equipeCorretor || "equipe1"),
+    nome: corretorNome || "",
+    email: corretorEmail || ""
+  }).catch(()=>{});
+
+  // devolve dados locais (sem leitura extra)
+  const merged = {
+    ...data,
+    status:"em_atendimento",
+    corretorId:corretorUid,
+    corretorEmail:corretorEmail || null,
+    equipe: data.equipe || equipeCorretor || null,
+    emAtendimentoEm:agora,
+    timestampDistribuicao:agora,
+    atualizadoEm:agora
+  };
+
+  return { ref, data: merged };
 }
 
 /** =========================
@@ -845,146 +999,6 @@ async function denyUser(uid){
     negado: true,
     negadoEm: nowMs()
   });
-}
-
-/** =========================
- *  USERS MAP (nomes)
- *  ========================= */
-async function fetchUsersMapByIds(ids){
-  const uniq = Array.from(new Set((ids||[]).filter(Boolean)));
-  if(!uniq.length) return {};
-  const chunks = [];
-  const copy = uniq.slice();
-  while(copy.length) chunks.push(copy.splice(0, 10));
-
-  const map = {};
-  for(const c of chunks){
-    const snap = await db.collection("users")
-      .where(firebase.firestore.FieldPath.documentId(),"in",c)
-      .get();
-    snap.forEach(d=>{ map[d.id] = d.data(); });
-  }
-  return map;
-}
-function displayCorretorName(row, usersMap){
-  const u = usersMap && row.corretorId ? (usersMap[row.corretorId] || null) : null;
-  return safe((u && u.nome) ? u.nome : (row.corretorEmail || row.corretorId));
-}
-
-/** =========================================================
- *  RELATÓRIOS / TOP5 / MINI CRM (proteção de leituras)
- *  ========================================================= */
-
-// ✅ LIMITES mais baixos para não estourar leitura
-async function fetchFinalizadosRecentes({ limit=800 }={}){
-  const snap = await db.collection("leads")
-    .orderBy("timestampFinalizacao","desc")
-    .limit(limit)
-    .get();
-
-  const arr = [];
-  snap.forEach(d=>{
-    const x = d.data() || {};
-    if(!x.timestampFinalizacao) return;
-    arr.push({ id:d.id, ...x });
-  });
-  return arr;
-}
-
-async function fetchTentativasRecentes({ limit=1200 }={}){
-  const snap = await db.collection("leads")
-    .orderBy("timestampDistribuicao","desc")
-    .limit(limit)
-    .get();
-
-  const arr = [];
-  snap.forEach(d=>{
-    const x = d.data() || {};
-    if(!x.timestampDistribuicao) return;
-    arr.push({ id:d.id, ...x });
-  });
-  return arr;
-}
-
-function inRange(ts, startTs, endTs){
-  return (typeof ts === "number") && ts >= startTs && ts <= endTs;
-}
-
-function applyScope(list, { scope, myUser }){
-  if(scope === "corretor"){
-    return list.filter(x => x.corretorId === myUser.uid);
-  }
-  if(scope === "gerente"){
-    const eq = myUser.equipe || "equipe1";
-    return list.filter(x => (x.equipe||"") === eq);
-  }
-  return list; // diretor: tudo
-}
-
-// ✅ Proteção: limita relatório pesado para no máximo 7 dias (evita travar/estourar quota)
-async function fetchLeadsForPeriodNoIndex({ scope, myUser, de, ate }){
-  const startTs = rangeToTs(de, false);
-  const endTs   = rangeToTs(ate, true);
-
-  // Se o período for grande, a chance de estourar leituras é alta.
-  // Mantemos seguro: limite de 7 dias (você pediu foco em não travar).
-  const dias = daysBetweenISO(de, ate);
-  const safeDias = Math.min(dias, 7);
-
-  let safeDe = de;
-  if(dias > 7){
-    // recorta para os últimos 7 dias até "ate"
-    const end = rangeToTs(ate, false);
-    const d = new Date(end);
-    d.setDate(d.getDate() - 6);
-    safeDe = toISODateInput(d.getTime());
-  }
-
-  const startSafe = rangeToTs(safeDe, false);
-  const endSafe   = endTs;
-
-  const [finalizadosAll, tentativasAll] = await Promise.all([
-    fetchFinalizadosRecentes({ limit: 800 + (safeDias * 120) }),
-    fetchTentativasRecentes({ limit: 1200 + (safeDias * 180) })
-  ]);
-
-  let finals = finalizadosAll.filter(x => inRange(x.timestampFinalizacao, startSafe, endSafe) && (x.status === "finalizado" || x.atendeu === true || !!x.resultado));
-  let tries  = tentativasAll.filter(x => inRange(x.timestampDistribuicao, startSafe, endSafe));
-
-  finals = applyScope(finals, { scope, myUser });
-  tries  = applyScope(tries,  { scope, myUser });
-
-  return { finals, tries, safeDe, safeAte: ate, wasClamped: (dias > 7) };
-}
-
-function computeScoreboard({ finals, tries }){
-  const byCorretor = {};
-
-  for(const t of (tries||[])){
-    const cid = t.corretorId || "SEM";
-    if(cid === "SEM") continue;
-    if(!byCorretor[cid]){
-      byCorretor[cid] = { corretorId: cid, corretorEmail: t.corretorEmail||"", tentativas:0, atendidos:0, ag:0, pr:0, si:0, pontos:0 };
-    }
-    byCorretor[cid].tentativas += 1;
-  }
-
-  for(const f of (finals||[])){
-    const cid = f.corretorId || "SEM";
-    if(cid === "SEM") continue;
-    if(!byCorretor[cid]){
-      byCorretor[cid] = { corretorId: cid, corretorEmail: f.corretorEmail||"", tentativas:0, atendidos:0, ag:0, pr:0, si:0, pontos:0 };
-    }
-    byCorretor[cid].atendidos += 1;
-
-    if(f.resultado === "AGENDAMENTO"){ byCorretor[cid].ag += 1; byCorretor[cid].pontos += 10; }
-    else if(f.resultado === "PROMESSA DOCUMENTAÇÃO"){ byCorretor[cid].pr += 1; byCorretor[cid].pontos += 6; }
-    else if(f.atendeu === true){ byCorretor[cid].si += 1; byCorretor[cid].pontos += 1; }
-  }
-
-  const list = Object.values(byCorretor);
-  list.sort((a,b)=> (b.pontos - a.pontos) || (b.ag - a.ag) || (b.pr - a.pr) || (b.atendidos - a.atendidos));
-  return list;
 }
 
 /** =========================
@@ -1038,7 +1052,7 @@ async function renderPainel(role, user, ud){
         <div class="row">
           <div class="grow">
             <div><b>Status do Operador</b></div>
-            <div class="small muted">Quando PAUSADO, você não atende nem avança leads.</div>
+            <div class="small muted">Quando PAUSADO, você não puxa leads.</div>
           </div>
         </div>
         <div class="divider"></div>
@@ -1053,11 +1067,11 @@ async function renderPainel(role, user, ud){
       </div>
 
       <div class="card">
-        <div><b>Top 5 (Equipe e Empresa)</b></div>
-        <div class="small muted">Clique para atualizar.</div>
+        <div><b>Ranking (Economia)</b></div>
+        <div class="small muted">Corretor: 1x por dia após ${RANKING_RELEASE_HOUR}h.</div>
         <div class="divider"></div>
         <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
-        <div id="top5Box" style="margin-top:12px"></div>
+        <div id="top5Box" style="margin-top:12px" class="muted"></div>
       </div>
     `;
   }
@@ -1066,16 +1080,16 @@ async function renderPainel(role, user, ud){
     return `
       <div class="card">
         <div><b>Painel do Gerente</b></div>
-        <div class="small muted">Foco total em produtividade (sem atendimento).</div>
+        <div class="small muted">Ranking 1x por dia após ${RANKING_RELEASE_HOUR}h.</div>
         <div class="divider"></div>
         <div class="small muted">Equipe: <b>${safe(ud.equipe||"equipe1")}</b></div>
       </div>
 
       <div class="card">
-        <div><b>Top 5 (Equipe e Empresa)</b></div>
+        <div><b>Ranking (Economia)</b></div>
         <div class="divider"></div>
         <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
-        <div id="top5Box" style="margin-top:12px"></div>
+        <div id="top5Box" style="margin-top:12px" class="muted"></div>
       </div>
     `;
   }
@@ -1083,14 +1097,14 @@ async function renderPainel(role, user, ud){
   return `
     <div class="card">
       <div><b>Painel do Diretor</b></div>
-      <div class="small muted">Você vê a operação completa e aprova acessos.</div>
+      <div class="small muted">Diretor tem acesso livre aos rankings e aprovações.</div>
     </div>
 
     <div class="card">
-      <div><b>Top 5 (Empresa)</b></div>
+      <div><b>Ranking (Empresa)</b></div>
       <div class="divider"></div>
       <button class="btn btnGold" onclick="loadTop5()">🏆 VER TOP 5</button>
-      <div id="top5Box" style="margin-top:12px"></div>
+      <div id="top5Box" style="margin-top:12px" class="muted"></div>
     </div>
   `;
 }
@@ -1098,7 +1112,7 @@ async function renderPainel(role, user, ud){
 window.setMeActive = async function(ativo){
   const user = auth.currentUser;
   await setActiveStatus(user.uid, ativo);
-  cachedUserData = await getUserDoc(user.uid); // ok: ação manual
+  cachedUserData = await getUserDoc(user.uid);
   await renderAppShell();
 };
 
@@ -1117,11 +1131,11 @@ async function renderAtendimento(role, user, ud){
   return `
     <div class="card">
       <div><b>Fonte de Leads</b></div>
-      <div class="small muted">Escolha a lista para bater agora.</div>
+      <div class="small muted">Lista Geral agora é bolsão (não precisa distribuir no upload).</div>
       <div class="divider"></div>
 
       <select id="leadSource" ${disabledAttr}>
-        <option value="geral">Lista Geral (Diretoria)</option>
+        <option value="geral">Lista Geral (Bolsão)</option>
         <option value="gerente">Lista do Gerente (Equipe)</option>
         <option value="minha">Minha Lista (Corretor)</option>
       </select>
@@ -1132,7 +1146,7 @@ async function renderAtendimento(role, user, ud){
 
       <div class="divider"></div>
       <div class="small muted">
-        Dica: se estiver PAUSADO, não atende nem avança lead.
+        Dica: se estiver PAUSADO, não puxa lead.
       </div>
     </div>
 
@@ -1144,7 +1158,7 @@ async function renderAtendimento(role, user, ud){
 
 window.pegarProximoLead = async function(){
   const user = auth.currentUser;
-  const me = cachedUserData; // ✅ sem leitura
+  const me = cachedUserData;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Clique em ESTOU ATIVO primeiro.");
   if(leadAtualRef) return alert("Você já está com um lead em atendimento. Finalize antes.");
 
@@ -1155,6 +1169,7 @@ window.pegarProximoLead = async function(){
     source,
     corretorUid: user.uid,
     corretorEmail: user.email,
+    corretorNome: me.nome || "",
     equipeCorretor: equipe
   });
 
@@ -1173,12 +1188,10 @@ window.pegarProximoLead = async function(){
 async function renderLeadInArea(){
   const lead = leadAtualData;
   const area = $("leadArea");
-
-  // ✅ sem leitura no Firestore (evita mensagem vazia quando quota/limite)
   const userAtual = cachedUserData || {};
   const isAtivo = !!userAtual.ativo;
 
-  const telClean = cleanPhone(lead.telefone);
+  const telClean = normalizePhone(lead.telefone) || cleanPhone(lead.telefone);
 
   const msgBase  = (userAtual.mensagemPadrao && String(userAtual.mensagemPadrao).trim())
     ? userAtual.mensagemPadrao
@@ -1187,7 +1200,7 @@ async function renderLeadInArea(){
   const msgFinal = encodeURIComponent(templateMessage(msgBase, lead));
 
   const emailTo = encodeURIComponent(lead.email || "");
-  const mailSubject = encodeURIComponent("PROEFI - ALVENA");
+  const mailSubject = encodeURIComponent("PROEFI ULTRA");
   const mailBody = msgFinal;
 
   const smsHref = buildSmsHref(telClean, msgFinal);
@@ -1237,23 +1250,20 @@ async function renderLeadInArea(){
 window.uiNaoAtendeu = async function(){
   if(!leadAtualRef) return;
   const user = auth.currentUser;
-  const me = cachedUserData; // ✅ sem leitura
+  const me = cachedUserData;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Não pode avançar lead.");
 
   const ok = await openModal("Confirmar", "Marcar como NÃO ATENDEU e devolver para o FIM da fila?");
   if(!ok) return;
 
-  // ✅ ALTERAÇÃO: volta por último na fila (sem 5 minutos)
   const novaFilaOrdem = nowMs();
 
   await leadAtualRef.update({
     status: "fila",
-    corretorId: (leadAtualData.origem === "geral") ? user.uid : null,
-    corretorEmail: (leadAtualData.origem === "geral") ? user.email : null,
-
-    filaOrdem: novaFilaOrdem, // ✅ joga pro final
-
-    cooldownAte: null, // não usamos mais
+    // geral: volta pro bolsão (sem corretor fixo)
+    corretorId: null,
+    corretorEmail: null,
+    filaOrdem: novaFilaOrdem,
 
     emAtendimentoEm: null,
     timestampFinalizacao: null,
@@ -1314,6 +1324,18 @@ window.uiAtendeu = function(){
 
     <div style="height:10px"></div>
 
+    <div class="collapseHeader" onclick="toggleCollapse('cIn')">
+      <span>✅ INTERESSADO (sem agendar agora)</span>
+      <span class="muted">abrir/fechar</span>
+    </div>
+    <div class="collapseBody" id="cIn">
+      <div class="fieldLabel">Feedback (obrigatório)</div>
+      <textarea id="fbIn" placeholder="O que ficou pendente? Próximo passo?"></textarea>
+      <button class="btn btnGreen" onclick="confirmarAtendeu('INTERESSADO')">CONFIRMAR INTERESSADO</button>
+    </div>
+
+    <div style="height:10px"></div>
+
     <div class="collapseHeader" onclick="toggleCollapse('cSi')">
       <span>⛔ NÃO GEROU INTERESSE</span>
       <span class="muted">abrir/fechar</span>
@@ -1329,7 +1351,7 @@ window.uiAtendeu = function(){
 window.toggleCollapse = function(id){
   const el = $(id);
   const open = el.classList.contains("open");
-  ["cAg","cPr","cSi"].forEach(x=>{
+  ["cAg","cPr","cIn","cSi"].forEach(x=>{
     const e = $(x); if(e) e.classList.remove("open");
   });
   if(!open) el.classList.add("open");
@@ -1337,7 +1359,7 @@ window.toggleCollapse = function(id){
 
 window.confirmarAtendeu = async function(resultado){
   if(!leadAtualRef) return;
-  const me = cachedUserData; // ✅ sem leitura
+  const me = cachedUserData;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Não pode finalizar.");
 
   let dataAgendada = null;
@@ -1351,6 +1373,10 @@ window.confirmarAtendeu = async function(resultado){
     obs = ($("obsAg").value || "").trim();
   }else if(resultado === "PROMESSA DOCUMENTAÇÃO"){
     obs = ($("obsPr").value || "").trim();
+  }else if(resultado === "INTERESSADO"){
+    const fbIn = ($("fbIn").value || "").trim();
+    if(!fbIn) return alert("Feedback é obrigatório.");
+    obs = fbIn;
   }else{
     const fb = ($("fb").value || "").trim();
     if(!fb) return alert("Feedback é obrigatório.");
@@ -1360,19 +1386,33 @@ window.confirmarAtendeu = async function(resultado){
   const ok = await openModal("Confirmar", `Finalizar como: ${resultado}?`);
   if(!ok) return;
 
+  const agora = nowMs();
+  const today = dayKey(agora);
+
   await leadAtualRef.update({
     status: "finalizado",
     atendeu: true,
     resultado,
     observacao: obs || null,
     dataAgendada: dataAgendada,
-    timestampFinalizacao: nowMs(),
-    atualizadoEm: nowMs()
+    timestampFinalizacao: agora,
+    atualizadoEm: agora
   });
 
+  // ✅ barulho dinheiro apenas para agendamento/promessa
   if(resultado === "AGENDAMENTO" || resultado === "PROMESSA DOCUMENTAÇÃO"){
     beepCash();
   }
+
+  // ✅ stats finalize
+  bumpStatsFinalize({
+    day: today,
+    uid: auth.currentUser.uid,
+    equipe: me.equipe || "equipe1",
+    nome: me.nome || "",
+    email: auth.currentUser.email || "",
+    resultado
+  }).catch(()=>{});
 
   leadAtualRef = null;
   leadAtualData = null;
@@ -1381,15 +1421,16 @@ window.confirmarAtendeu = async function(resultado){
 };
 
 /** =========================
- *  TAB: MINI CRM
+ *  TAB: MINI CRM (econômico)
+ *  Agora é resumo do dia (stats), sem listar clientes.
  *  ========================= */
 async function renderMiniCRM(role, user, ud){
   return `
     <div class="card">
       <div class="row">
         <div class="grow">
-          <div><b>Mini CRM</b></div>
-          <div class="small muted">Agendamentos e Promessas (proteção de leituras).</div>
+          <div><b>Mini CRM (Resumo do dia)</b></div>
+          <div class="small muted">Economia: não lista clientes. Usa statsDiario.</div>
         </div>
         <button class="btn btnGold" style="max-width:220px" onclick="loadMiniCRM()">ATUALIZAR</button>
       </div>
@@ -1406,100 +1447,91 @@ window.loadMiniCRM = async function(){
 
   try{
     const user = auth.currentUser;
-    const me = cachedUserData || await getUserDoc(user.uid); // fallback
+    const me = cachedUserData || await getUserDoc(user.uid);
     const role = me.role;
 
-    // ✅ reduzido de 2500 para 800 (proteção de leituras)
-    let list = await fetchFinalizadosRecentes({ limit: 800 });
-
-    list = list.filter(x => x.resultado === "AGENDAMENTO" || x.resultado === "PROMESSA DOCUMENTAÇÃO");
-
-    if(role === "corretor"){
-      list = list.filter(x => x.corretorId === user.uid);
-    }else if(role === "gerente"){
-      const eq = me.equipe || "equipe1";
-      list = list.filter(x => (x.equipe||"") === eq);
-    }
-
-    if(list.length === 0){
-      box.innerHTML = `<div class="muted">Sem agendamentos/promessas ainda.</div>`;
+    // gate (diretor livre)
+    const g = canViewOncePerDay({ uid:user.uid, role, feature:"MINI_CRM" });
+    if(!g.ok){
+      box.innerHTML = `<div class="errorBox">${g.reason}</div>`;
       return;
     }
 
-    const ids = list.map(x=>x.corretorId).filter(Boolean);
-    const usersMap = await fetchUsersMapByIds(ids);
+    const day = dayKey(nowMs());
+    if(role === "corretor"){
+      const docId = statsDocIdCorretor(day, user.uid);
+      const snap = await db.collection("statsDiario").doc(docId).get();
+      const s = snap.exists ? snap.data() : null;
 
-    const items = list.slice(0, 60).map(l=>{
-      const who = displayCorretorName(l, usersMap);
-      const tagClass = (l.resultado==="AGENDAMENTO") ? "tagAg" : "tagPr";
-      const tag = (l.resultado==="AGENDAMENTO") ? "AGENDAMENTO" : "PROMESSA";
-
-      if(role === "diretor"){
-        return `
-          <div class="item">
-            <div class="itemTop">
-              <span class="tag ${tagClass}">${tag}</span>
-              <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
-            </div>
-            <div style="margin-top:8px"><b>Corretor:</b> ${who}</div>
-          </div>
-        `;
+      if(!s){
+        box.innerHTML = `<div class="muted">Sem stats hoje ainda.</div>`;
+        return;
       }
 
-      if(role === "gerente"){
-        return `
-          <div class="item">
-            <div class="itemTop">
-              <span class="tag ${tagClass}">${tag}</span>
-              <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
-            </div>
-            <div style="margin-top:8px"><b>${safe(l.nome||"")}</b></div>
-            <div class="small muted">${safe(l.telefone||"")}</div>
-            <div style="margin-top:6px"><b>Corretor:</b> ${who}</div>
-          </div>
-        `;
-      }
-
-      return `
-        <div class="item">
-          <div class="itemTop">
-            <span class="tag ${tagClass}">${tag}</span>
-            <span class="small muted">${new Date(l.timestampFinalizacao).toLocaleString()}</span>
-          </div>
-          <div style="margin-top:8px"><b>${safe(l.nome||"")}</b></div>
-          <div class="small muted">${safe(l.telefone||"")} • ${safe(l.email||"")}</div>
-          <div class="small muted" style="margin-top:6px">${safe(l.observacao||"")}</div>
-        </div>
+      box.innerHTML = `
+        <div><b>Seu resumo de hoje</b></div>
+        <div class="divider"></div>
+        <div class="small muted">Tentativas: <b>${s.tentativas||0}</b></div>
+        <div class="small muted">Atendidos: <b>${s.atendidos||0}</b></div>
+        <div class="small muted">Agendamentos: <b>${s.ag||0}</b></div>
+        <div class="small muted">Promessas: <b>${s.pr||0}</b></div>
+        <div class="small muted">Interessados: <b>${s.interessado||0}</b></div>
+        <div class="small muted">Sem interesse: <b>${s.si||0}</b></div>
+        <div class="divider"></div>
+        <div><b>Pontos:</b> ${s.pontos||0}</div>
       `;
-    }).join("");
+      return;
+    }
 
-    box.innerHTML = `<div class="list">${items}</div>`;
+    // gerente/diretor: resumo empresa + (gerente filtra equipe na tela)
+    const stats = await fetchStatsCorretorHoje();
+    const equipe = me.equipe || "equipe1";
+
+    let scoped = stats;
+    if(role === "gerente"){
+      scoped = stats.filter(x => (x.equipe||"") === equipe);
+    }
+
+    const sum = (key)=> scoped.reduce((a,x)=> a + Number(x[key]||0), 0);
+
+    box.innerHTML = `
+      <div><b>Resumo de hoje (${role==="gerente" ? "Equipe "+equipe : "Empresa"})</b></div>
+      <div class="divider"></div>
+      <div class="small muted">Tentativas: <b>${sum("tentativas")}</b></div>
+      <div class="small muted">Atendidos: <b>${sum("atendidos")}</b></div>
+      <div class="small muted">Agendamentos: <b>${sum("ag")}</b></div>
+      <div class="small muted">Promessas: <b>${sum("pr")}</b></div>
+      <div class="small muted">Interessados: <b>${sum("interessado")}</b></div>
+      <div class="small muted">Sem interesse: <b>${sum("si")}</b></div>
+      <div class="divider"></div>
+      <div><b>Pontos:</b> ${sum("pontos")}</div>
+    `;
   }catch(e){
-    box.innerHTML = `<div class="errorBox">Erro ao carregar Mini CRM:\n${safe(e.message || e.code || e)}</div>`;
+    box.innerHTML = `<div class="errorBox">Erro no Mini CRM:\n${safe(e.message || e.code || e)}</div>`;
   }
 };
 
 /** =========================
- *  TAB: RESULTADOS (RELATÓRIO só gerente/diretor)
+ *  TAB: RESULTADOS (Relatório econômico)
  *  ========================= */
 async function renderResultados(role, user, ud){
   if(role === "corretor"){
     return `
       <div class="card">
         <div><b>Resultados</b></div>
-        <div class="small muted">Relatórios (Excel) são liberados apenas para <b>GERENTE</b> e <b>DIRETOR</b>.</div>
+        <div class="small muted">Relatórios são para <b>GERENTE</b> e <b>DIRETOR</b>.</div>
         <div class="divider"></div>
         <button class="btn btnGold" onclick="loadTop5()">🏆 TOP 5</button>
         <div class="divider"></div>
-        <div id="resultsBox" class="muted">Clique no TOP 5 para atualizar.</div>
+        <div id="resultsBox" class="muted">Clique no TOP 5 (1x por dia após ${RANKING_RELEASE_HOUR}h).</div>
       </div>
     `;
   }
 
   return `
     <div class="card">
-      <div><b>Relatórios e Rankings</b></div>
-      <div class="small muted">Proteção de leituras: máximo 7 dias por vez.</div>
+      <div><b>Relatórios e Rankings (Economia)</b></div>
+      <div class="small muted">Relatório Excel usa statsDiario (não varre leads).</div>
       <div class="divider"></div>
 
       <div class="grid2">
@@ -1516,17 +1548,41 @@ async function renderResultados(role, user, ud){
       <div class="divider"></div>
 
       <div class="grid2">
-        <button class="btn btnGold" onclick="gerarRelatorioExcelPeriodo()">📊 GERAR EXCEL</button>
+        <button class="btn btnGold" onclick="gerarRelatorioExcelEconomico()">📊 GERAR EXCEL (ECONÔMICO)</button>
         <button class="btn btnBlue" onclick="loadTop5()">🏆 TOP 5</button>
       </div>
 
       <div class="divider"></div>
-      <div id="resultsBox" class="muted">Selecione período e gere.</div>
+      <div id="resultsBox" class="muted">Selecione período (até 7 dias recomendado) e gere.</div>
     </div>
   `;
 }
 
-window.gerarRelatorioExcelPeriodo = async function(){
+async function fetchStatsRangeByDays(daysList){
+  // Faz 1 query por dia (barato: ~30 docs/dia)
+  const all = [];
+  for(const day of daysList){
+    const snap = await db.collection("statsDiario")
+      .where("kindDay","==",`CORRETOR__${day}`)
+      .get();
+    snap.forEach(d=> all.push({ id:d.id, ...(d.data()||{}) }));
+  }
+  return all;
+}
+
+function isoListDays(de, ate){
+  const start = rangeToTs(de, false);
+  const end = rangeToTs(ate, false);
+  const out = [];
+  const d = new Date(start);
+  while(d.getTime() <= end){
+    out.push(dayKey(d.getTime()));
+    d.setDate(d.getDate()+1);
+  }
+  return out;
+}
+
+window.gerarRelatorioExcelEconomico = async function(){
   const box = $("resultsBox");
   if(box) box.innerHTML = `<div class="muted">Gerando relatório...</div>`;
 
@@ -1534,91 +1590,89 @@ window.gerarRelatorioExcelPeriodo = async function(){
     const user = auth.currentUser;
     const me = cachedUserData || await getUserDoc(user.uid);
     const role = me.role;
-
     if(role === "corretor"){
-      alert("Relatório Excel disponível apenas para GERENTE e DIRETOR.");
+      alert("Relatório disponível apenas para GERENTE e DIRETOR.");
       return;
     }
 
     const de = $("repDe").value || toISODateInput(nowMs());
     const ate = $("repAte").value || toISODateInput(nowMs());
 
-    const scope = (role==="gerente") ? "gerente" : "diretor";
+    const days = isoListDays(de, ate);
+    if(days.length > 7){
+      alert("Recomendação: máximo 7 dias para manter economia (você pode gerar por semanas).");
+    }
 
-    const { finals, tries, safeDe, safeAte, wasClamped } = await fetchLeadsForPeriodNoIndex({
-      scope,
-      myUser: { uid:user.uid, equipe: me.equipe },
-      de, ate
-    });
+    const stats = await fetchStatsRangeByDays(days);
 
-    const sb = computeScoreboard({ finals, tries });
+    // scope gerente = equipe
+    const equipe = me.equipe || "equipe1";
+    let scoped = stats;
+    if(role === "gerente"){
+      scoped = stats.filter(x => (x.equipe||"") === equipe);
+    }
 
-    const totalTentativas = tries.length;
-    const totalAtendidos = finals.length;
-    const totalAg = finals.filter(x=>x.resultado==="AGENDAMENTO").length;
-    const totalPr = finals.filter(x=>x.resultado==="PROMESSA DOCUMENTAÇÃO").length;
-    const totalSi = finals.filter(x=>x.resultado==="NÃO GEROU INTERESSE").length;
+    // agrega por corretorId
+    const by = {};
+    for(const s of scoped){
+      const cid = s.corretorId || "";
+      if(!cid) continue;
+      if(!by[cid]){
+        by[cid] = {
+          Corretor: s.nome || s.email || cid,
+          Email: s.email || "",
+          Equipe: s.equipe || "",
+          Tentativas: 0,
+          Atendidos: 0,
+          Agendamentos: 0,
+          Promessas: 0,
+          Interessados: 0,
+          "Sem interesse": 0,
+          Pontos: 0
+        };
+      }
+      by[cid].Tentativas += Number(s.tentativas||0);
+      by[cid].Atendidos += Number(s.atendidos||0);
+      by[cid].Agendamentos += Number(s.ag||0);
+      by[cid].Promessas += Number(s.pr||0);
+      by[cid].Interessados += Number(s.interessado||0);
+      by[cid]["Sem interesse"] += Number(s.si||0);
+      by[cid].Pontos += Number(s.pontos||0);
+    }
+
+    const rows = Object.values(by);
+    rows.sort((a,b)=> (b.Pontos - a.Pontos) || (b.Agendamentos - a.Agendamentos) || (b.Promessas - a.Promessas));
+
+    // Resumo
+    const total = (k)=> rows.reduce((a,x)=> a + Number(x[k]||0), 0);
 
     const resumo = [
-      ["PROEFI - ALVENA", ""],
+      ["PROEFI ULTRA (Relatório Econômico)", ""],
       ["Perfil", role.toUpperCase()],
       ["Email", user.email],
-      ["Equipe", me.equipe || ""],
-      ["Período (seguro)", `${safeDe} até ${safeAte}`],
-      ["Aviso", wasClamped ? "Período maior que 7 dias foi reduzido para evitar estourar leituras." : "OK"],
+      ["Equipe", role==="gerente" ? equipe : "TODAS"],
+      ["Período", `${de} até ${ate}`],
       ["", ""],
-      ["Total tentativas", totalTentativas],
-      ["Total atendidos", totalAtendidos],
-      ["Agendamentos", totalAg],
-      ["Promessas", totalPr],
-      ["Não gerou interesse", totalSi],
+      ["Tentativas", total("Tentativas")],
+      ["Atendidos", total("Atendidos")],
+      ["Agendamentos", total("Agendamentos")],
+      ["Promessas", total("Promessas")],
+      ["Interessados", total("Interessados")],
+      ["Sem interesse", total("Sem interesse")],
+      ["Pontos", total("Pontos")]
     ];
+
     const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
-
-    const ids = sb.map(x=>x.corretorId);
-    const usersMap = await fetchUsersMapByIds(ids);
-
-    const rankRows = sb.map((r, i)=>({
-      Rank: i+1,
-      Corretor: displayCorretorName(r, usersMap),
-      Tentativas: r.tentativas,
-      Atendidos: r.atendidos,
-      Agendamentos: r.ag,
-      Promessas: r.pr,
-      "Sem interesse": r.si,
-      Pontos: r.pontos
-    }));
-    const wsRank = XLSX.utils.json_to_sheet(rankRows);
-
-    const detRows = finals.map(f=>{
-      const tempoMinutos = (f.timestampFinalizacao && f.timestampDistribuicao)
-        ? timeMin(f.timestampFinalizacao - f.timestampDistribuicao) : "";
-      return {
-        Data: f.timestampFinalizacao ? new Date(f.timestampFinalizacao).toLocaleString() : "",
-        Cliente: f.nome || "",
-        Telefone: f.telefone || "",
-        Email: f.email || "",
-        Resultado: f.resultado || "",
-        "Data/Hora Agendada": f.dataAgendada || "",
-        Feedback: f.observacao || "",
-        "Tempo Atendimento (min)": tempoMinutos,
-        Corretor: f.corretorEmail || ""
-      };
-    });
-    const wsDet = XLSX.utils.json_to_sheet(detRows);
+    const wsRank = XLSX.utils.json_to_sheet(rows.map((r,i)=>({ Rank:i+1, ...r })));
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
     XLSX.utils.book_append_sheet(wb, wsRank, "Ranking");
-    XLSX.utils.book_append_sheet(wb, wsDet, "Atendidos");
 
-    XLSX.writeFile(wb, `PROEFI_RELATORIO_${role.toUpperCase()}_${safeDe}_ATE_${safeAte}.xlsx`);
+    XLSX.writeFile(wb, `PROEFI_ULTRA_RELATORIO_${role.toUpperCase()}_${de}_ATE_${ate}.xlsx`);
 
     if(box){
       box.innerHTML = `<div class="ok">Excel gerado com sucesso!</div><div class="small muted">Arquivo baixado no dispositivo.</div>`;
-      if(wasClamped){
-        box.innerHTML += `<div class="small muted" style="margin-top:6px">⚠️ Período maior que 7 dias foi reduzido para proteger suas leituras.</div>`;
-      }
     }
   }catch(e){
     if(box){
@@ -1630,7 +1684,7 @@ window.gerarRelatorioExcelPeriodo = async function(){
 };
 
 /** =========================
- *  TOP 5 (proteção de leituras)
+ *  TOP 5 (economia via stats)
  *  ========================= */
 window.loadTop5 = async function(){
   const box = $("top5Box") || $("resultsBox");
@@ -1641,70 +1695,62 @@ window.loadTop5 = async function(){
   try{
     const user = auth.currentUser;
     const me = cachedUserData || await getUserDoc(user.uid);
+    const role = me.role;
+
+    const g = canViewOncePerDay({ uid:user.uid, role, feature:"TOP5" });
+    if(!g.ok){
+      box.innerHTML = `<div class="errorBox">${g.reason}</div>`;
+      return;
+    }
+
     const equipe = me.equipe || "equipe1";
-    const today = toISODateInput(nowMs());
+    const stats = await fetchStatsCorretorHoje();
 
-    async function computePeriod(de, ate){
-      const { finals, tries } = await fetchLeadsForPeriodNoIndex({
-        scope: "diretor",
-        myUser: { uid:user.uid, equipe },
-        de, ate
-      });
+    // empresa
+    const empresa = stats.slice().sort((a,b)=> (Number(b.pontos||0) - Number(a.pontos||0))).slice(0,5);
 
-      const sbEmpresa = computeScoreboard({ finals, tries }).slice(0,5);
+    // equipe
+    const eq = stats.filter(x=> (x.equipe||"") === equipe)
+      .sort((a,b)=> (Number(b.pontos||0) - Number(a.pontos||0)))
+      .slice(0,5);
 
-      const finalsEq = finals.filter(x => (x.equipe||"") === equipe);
-      const triesEq  = tries.filter(x => (x.equipe||"") === equipe);
-      const sbEq = computeScoreboard({ finals: finalsEq, tries: triesEq }).slice(0,5);
-
-      const ids = [...sbEmpresa.map(x=>x.corretorId), ...sbEq.map(x=>x.corretorId)].filter(Boolean);
-      const usersMap = await fetchUsersMapByIds(ids);
-
-      return { sbEmpresa, sbEq, usersMap };
-    }
-
-    let de = today, ate = today;
-    let label = "hoje";
-    let data = await computePeriod(de, ate);
-
-    if(data.sbEmpresa.length === 0 && data.sbEq.length === 0){
-      de = isoDaysAgo(6);
-      ate = today;
-      label = `últimos 7 dias (${de} até ${ate})`;
-      data = await computePeriod(de, ate);
-    }
-
-    const renderList = (arr, usersMap)=> arr.length ? `
+    const renderList = (arr)=> arr.length ? `
       <div class="tableWrap" style="margin-top:10px">
         <table>
           <thead>
             <tr>
-              <th>#</th><th>Corretor</th><th>Pontos</th><th>Ag</th><th>Pr</th><th>Atendidos</th><th>Tentativas</th>
+              <th>#</th><th>Corretor</th><th>Pontos</th><th>Ag</th><th>Pr</th><th>Int</th><th>Atendidos</th><th>Tentativas</th>
             </tr>
           </thead>
           <tbody>
             ${arr.map((r,i)=>`
               <tr>
                 <td><b>${i+1}</b></td>
-                <td>${displayCorretorName(r, usersMap)}</td>
-                <td><b>${r.pontos}</b></td>
-                <td>${r.ag}</td>
-                <td>${r.pr}</td>
-                <td>${r.atendidos}</td>
-                <td>${r.tentativas}</td>
+                <td>${safe(r.nome || r.email || r.corretorId || "")}</td>
+                <td><b>${Number(r.pontos||0)}</b></td>
+                <td>${Number(r.ag||0)}</td>
+                <td>${Number(r.pr||0)}</td>
+                <td>${Number(r.interessado||0)}</td>
+                <td>${Number(r.atendidos||0)}</td>
+                <td>${Number(r.tentativas||0)}</td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
-    ` : `<div class="muted">Sem dados no período.</div>`;
+    ` : `<div class="muted">Sem dados hoje.</div>`;
+
+    const day = dayKey(nowMs());
 
     box.innerHTML = `
-      <div><b>Top 5 Empresa (${label})</b></div>
-      ${renderList(data.sbEmpresa, data.usersMap)}
+      <div><b>Top 5 Empresa (Hoje: ${day})</b></div>
+      ${renderList(empresa)}
       <div style="height:14px"></div>
-      <div><b>Top 5 Equipe (${equipe}) (${label})</b></div>
-      ${renderList(data.sbEq, data.usersMap)}
+      <div><b>Top 5 Equipe (${equipe})</b></div>
+      ${renderList(eq)}
+      <div class="small muted" style="margin-top:10px">
+        Economia: Top5 usa <b>statsDiario</b> (não varre leads).
+      </div>
     `;
   }catch(e){
     box.innerHTML = `<div class="errorBox">Erro ao carregar Top 5:\n${safe(e.message || e.code || e)}</div>`;
@@ -1712,7 +1758,10 @@ window.loadTop5 = async function(){
 };
 
 /** =========================
- *  TAB: CONFIG
+ *  TAB: CONFIG (limpeza)
+ *  - Corretor: mensagem + upload minha lista
+ *  - Gerente: upload lista equipe
+ *  - Diretor: upload lista geral (sem distribuir)
  *  ========================= */
 async function renderConfig(role, user, ud){
   let html = ``;
@@ -1730,7 +1779,7 @@ async function renderConfig(role, user, ud){
 
       <div class="card">
         <div><b>Upload • Minha Lista (Corretor)</b></div>
-        <div class="small muted">XLS/XLSX/CSV (A: Nome, B: Telefone, C: Email)</div>
+        <div class="small muted">XLS/XLSX/CSV (A: Nome, B: Telefone, C: Email) • Dedup no arquivo</div>
         <div class="divider"></div>
         <input type="file" id="fileCorretor" accept=".xls,.xlsx,.csv" />
         <button class="btn btnBlue" onclick="uploadListaCorretor()">ENVIAR MINHA LISTA</button>
@@ -1741,37 +1790,31 @@ async function renderConfig(role, user, ud){
     html += `
       <div class="card">
         <div><b>Upload • Lista do Gerente (Equipe)</b></div>
-        <div class="small muted">Equipe: <b>${equipe}</b></div>
+        <div class="small muted">Equipe: <b>${equipe}</b> • Dedup no arquivo</div>
         <div class="divider"></div>
         <input type="file" id="fileGerente" accept=".xls,.xlsx,.csv" />
         <button class="btn btnGold" onclick="uploadListaGerente()">ENVIAR LISTA DA EQUIPE</button>
-      </div>
-
-      <div class="card">
-        <div><b>Email para relatórios</b></div>
-        <div class="divider"></div>
-        <input id="emailRelatorio" placeholder="Email do gerente (relatórios)" value="${safe(ud.emailRelatorio || "")}" />
-        <button class="btn btnBlue" onclick="salvarEmailRelatorio()">SALVAR EMAIL</button>
       </div>
     `;
   }else{
     html += `
       <div class="card">
         <div><b>Upload • Lista Geral (Diretoria)</b></div>
-        <div class="small muted">Distribui no upload para corretores <b>ATIVOS</b>.</div>
+        <div class="small muted">Agora é bolsão: não distribui no upload. Dedup no arquivo.</div>
         <div class="divider"></div>
         <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
-        <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR E DISTRIBUIR</button>
+        <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR PARA O BOLSÃO</button>
       </div>
     `;
   }
 
   html += `
     <div class="card">
-      <div><b>Relatório (Email pronto)</b></div>
-      <div class="small muted">O Excel é gerado e baixado. O email só abre o envio.</div>
-      <div class="divider"></div>
-      <button class="btn btnGhost" onclick="prepararEmailRelatorio()">✉️ ABRIR EMAIL DE RELATÓRIO</button>
+      <div><b>TTL / Auto-limpeza</b></div>
+      <div class="small muted">
+        Os docs de <b>leads</b> e <b>listas</b> já vão com <b>expireAt</b> (TTL ${TTL_LEADS_DIAS} dias).<br/>
+        Ative TTL no Firebase para apagar sozinho sem você fazer nada.
+      </div>
     </div>
   `;
 
@@ -1786,15 +1829,6 @@ window.salvarMensagemPadrao = async function(){
   alert("Mensagem padrão salva!");
 };
 
-window.salvarEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const email = ($("emailRelatorio").value || "").trim();
-  if(!email) return alert("Digite o email do gerente para relatórios.");
-  await db.collection("users").doc(user.uid).update({ emailRelatorio: email });
-  cachedUserData = await getUserDoc(user.uid);
-  alert("Email de relatórios salvo!");
-};
-
 window.uploadListaGeral = async function(){
   const file = $("fileDiretor")?.files?.[0];
   if(!file) return alert("Selecione um arquivo.");
@@ -1802,8 +1836,8 @@ window.uploadListaGeral = async function(){
   const me = cachedUserData || await getUserDoc(user.uid);
   if(me.role !== "diretor") return alert("Apenas DIRETOR pode subir lista geral.");
   try{
-    const r = await uploadLeadsFromFile({ file, origem:"geral", equipe:null, donoUploadUid:user.uid, distribuirGeralAgora:true });
-    alert(`Lista geral enviada! Total: ${r.total}.`);
+    const r = await uploadLeadsFromFile({ file, origem:"geral", equipe:null, donoUploadUid:user.uid });
+    alert(`Lista geral enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
     $("fileDiretor").value = "";
   }catch(e){
     alert(e.message || e.code);
@@ -1818,8 +1852,8 @@ window.uploadListaGerente = async function(){
   if(me.role !== "gerente") return alert("Apenas GERENTE pode subir lista da equipe.");
   try{
     const equipe = me.equipe || "equipe1";
-    const r = await uploadLeadsFromFile({ file, origem:"gerente", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false });
-    alert(`Lista da equipe enviada! Total: ${r.total}.`);
+    const r = await uploadLeadsFromFile({ file, origem:"gerente", equipe, donoUploadUid:user.uid });
+    alert(`Lista da equipe enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
     $("fileGerente").value = "";
   }catch(e){
     alert(e.message || e.code);
@@ -1834,60 +1868,12 @@ window.uploadListaCorretor = async function(){
   if(me.role !== "corretor") return alert("Apenas CORRETOR pode subir lista própria.");
   try{
     const equipe = me.equipe || "equipe1";
-    const r = await uploadLeadsFromFile({ file, origem:"corretor", equipe, donoUploadUid:user.uid, distribuirGeralAgora:false });
-    alert(`Sua lista foi enviada! Total: ${r.total}.`);
+    const r = await uploadLeadsFromFile({ file, origem:"corretor", equipe, donoUploadUid:user.uid });
+    alert(`Sua lista foi enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
     $("fileCorretor").value = "";
   }catch(e){
     alert(e.message || e.code);
   }
-};
-
-window.prepararEmailRelatorio = async function(){
-  const user = auth.currentUser;
-  const me = cachedUserData || await getUserDoc(user.uid);
-  const role = me.role;
-  const equipe = me.equipe || "equipe1";
-
-  let to = "";
-  if(role === "corretor"){
-    const gsnap = await db.collection("users")
-      .where("role","==","gerente")
-      .where("equipe","==",equipe)
-      .where("aprovado","==",true)
-      .limit(1)
-      .get();
-    if(gsnap.empty){
-      alert("Nenhum gerente encontrado para sua equipe (ou sem aprovado).");
-      return;
-    }
-    const gerente = gsnap.docs[0].data();
-    to = gerente.emailRelatorio || gerente.email || "";
-    if(!to){
-      alert("Gerente sem emailRelatorio configurado.");
-      return;
-    }
-  }else{
-    to = user.email;
-  }
-
-  const today = dayKey(nowMs());
-  const subject = encodeURIComponent(`PROEFI - ALVENA | Relatório | ${today}`);
-  const body = encodeURIComponent(
-`Olá,
-
-Segue o relatório (gerado no PROEFI).
-Perfil: ${role.toUpperCase()}
-Email: ${user.email}
-Equipe: ${equipe}
-Data: ${today}
-
-(Anexo: arquivo Excel gerado no PROEFI)
-
-Att,
-PROEFI - ALVENA`
-  );
-
-  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
 };
 
 /** =========================
@@ -1931,14 +1917,16 @@ window.loadApprovals = async function(){
   }
 
   box.innerHTML = `
-    <div class="list">
+    <div>
       ${list.map(u=>`
-        <div class="item">
-          <div class="itemTop">
-            <div><b>${safe(u.nome)}</b> <span class="small muted">(${safe(u.role)})</span></div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="row">
+            <div class="grow">
+              <div><b>${safe(u.nome)}</b> <span class="small muted">(${safe(u.role)})</span></div>
+              <div class="small muted">${safe(u.email)}</div>
+            </div>
             <span class="pill">Equipe: ${safe(u.equipe||"equipe1")}</span>
           </div>
-          <div class="small muted" style="margin-top:6px">${safe(u.email)}</div>
           <div class="divider"></div>
           <div class="grid2">
             <button class="btn btnGreen" onclick="approve('${u.uid}')">✅ APROVAR</button>
@@ -1993,8 +1981,7 @@ auth.onAuthStateChanged(async (user)=>{
       criadoEm: nowMs(),
       ativo:false,
       ativoAtualizadoEm: nowMs(),
-      mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse.",
-      emailRelatorio: ""
+      mensagemPadrao: "Olá {{nome}}, aqui é da equipe Alvena. Estou tentando falar com você sobre seu interesse."
     });
   }
 
