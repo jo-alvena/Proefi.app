@@ -296,8 +296,8 @@ const MASTER_DIRECTOR_EMAIL = "jo.alvenasolucoes@gmail.com";
 /** =========================
  *  ECONOMIA / REGRAS
  *  ========================= */
-const TTL_LEADS_DIAS = 10;         // TTL para leads/listas
-const TTL_STATS_DIAS = 30;         // stats guarda mais um pouco (baixo mesmo assim)
+const TTL_LEADS_DIAS = 10;         // TTL para leads/listas (campo expireAt)
+const TTL_STATS_DIAS = 30;         // stats
 const RANKING_RELEASE_HOUR = 19;   // após 19h
 const DAILY_VIEW_KEY_PREFIX = "PROEFI_ULTRA_VIEW_"; // localStorage
 
@@ -309,7 +309,7 @@ let leadAtualData = null;
 let detailsOpen = false;
 
 let currentTab = "painel";
-let cachedUserData = null;   // cache do usuário
+let cachedUserData = null;
 let cachedAuthUser = null;
 
 let modalResolve = null;
@@ -328,54 +328,34 @@ function dayKey(ts){
   const da = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${da}`;
 }
-
-function localHour(){
-  try{ return new Date().getHours(); }catch(e){ return 0; }
-}
-
-function isAfterReleaseHour(){
-  return localHour() >= RANKING_RELEASE_HOUR;
-}
+function localHour(){ try{ return new Date().getHours(); }catch(e){ return 0; } }
+function isAfterReleaseHour(){ return localHour() >= RANKING_RELEASE_HOUR; }
 
 function viewKeyFor(uid, feature, day){
   return `${DAILY_VIEW_KEY_PREFIX}${uid}__${feature}__${day}`;
 }
-
 function canViewOncePerDay({ uid, role, feature }){
-  // diretor: livre
   if(role === "diretor") return { ok:true, reason:"" };
-
   const today = dayKey(nowMs());
   if(!isAfterReleaseHour()){
     return { ok:false, reason:`Liberado apenas após ${RANKING_RELEASE_HOUR}h.` };
   }
-
   const k = viewKeyFor(uid, feature, today);
   const seen = localStorage.getItem(k);
   if(seen === "1"){
     return { ok:false, reason:`Você já consultou ${feature} hoje.` };
   }
-
-  // marca como visto
   localStorage.setItem(k, "1");
   return { ok:true, reason:"" };
 }
 
-function cleanPhone(raw){
-  return String(raw||"").replace(/\D/g,'');
-}
-
+function cleanPhone(raw){ return String(raw||"").replace(/\D/g,''); }
 function normalizePhone(raw){
   const d = cleanPhone(raw);
-  // não força DDD, só exige mínimo
   if(d.length < 10) return "";
-  // evita números absurdos
   if(d.length > 13) return d.slice(-13);
   return d;
 }
-
-function timeMin(ms){ return Math.max(0, Math.floor(ms/60000)); }
-
 function toISODateInput(ts){
   const d = new Date(ts);
   const y = d.getFullYear();
@@ -383,19 +363,16 @@ function toISODateInput(ts){
   const da = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${da}`;
 }
-
 function rangeToTs(dateStr, end=false){
   const [y,m,d] = dateStr.split("-").map(n=>parseInt(n,10));
   if(!end) return new Date(y, m-1, d, 0,0,0,0).getTime();
   return new Date(y, m-1, d, 23,59,59,999).getTime();
 }
-
 function addDays(ts, days){
   const d = new Date(ts);
   d.setDate(d.getDate() + Number(days||0));
   return d.getTime();
 }
-
 function templateMessage(msg, lead){
   const nome = lead?.nome || "";
   const tel  = lead?.telefone || "";
@@ -405,17 +382,13 @@ function templateMessage(msg, lead){
     .replaceAll("{{telefone}}", tel)
     .replaceAll("{{email}}", em);
 }
-
-// Link SMS mais compatível em Android
 function buildSmsHref(telClean, encodedText){
   return `sms:${telClean}?&body=${encodedText}`;
 }
-
 async function getUserDoc(uid){
   const snap = await db.collection("users").doc(uid).get();
   return snap.exists ? snap.data() : null;
 }
-
 function beepCash(){
   try{
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -449,19 +422,14 @@ function closeModal(ok){
 
 /** =========================
  *  STATS DIÁRIO (economia)
- *  =========================
- * Coleção: statsDiario
- * Doc: CORRETOR__YYYY-MM-DD__<uid>
- *      EMPRESA__YYYY-MM-DD
- * Fields: day, tipo, corretorId, equipe, nome, email, tentativas, atendidos, ag, pr, si, interessado, pontos
- */
+ *  ========================= */
 function statsDocIdCorretor(day, uid){ return `CORRETOR__${day}__${uid}`; }
 function statsDocIdEmpresa(day){ return `EMPRESA__${day}`; }
 
 function pointsForResult(res){
   if(res === "AGENDAMENTO") return 10;
   if(res === "PROMESSA DOCUMENTAÇÃO") return 6;
-  if(res === "INTERESSADO") return 2;             // novo
+  if(res === "INTERESSADO") return 2;
   if(res === "NÃO GEROU INTERESSE") return 1;
   return 0;
 }
@@ -469,13 +437,10 @@ function pointsForResult(res){
 async function bumpStatsAttempt({ day, uid, equipe, nome, email }){
   const docId = statsDocIdCorretor(day, uid);
   const empId = statsDocIdEmpresa(day);
-
   const expireAt = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_STATS_DIAS));
 
   const baseCor = {
-    day,
-    tipo: "CORRETOR",
-    corretorId: uid,
+    day, tipo:"CORRETOR", corretorId:uid,
     equipe: equipe || "equipe1",
     nome: nome || "",
     email: email || "",
@@ -485,8 +450,7 @@ async function bumpStatsAttempt({ day, uid, equipe, nome, email }){
   };
 
   const baseEmp = {
-    day,
-    tipo: "EMPRESA",
+    day, tipo:"EMPRESA",
     kindDay: `EMPRESA__${day}`,
     atualizadoEm: nowMs(),
     expireAt
@@ -494,16 +458,9 @@ async function bumpStatsAttempt({ day, uid, equipe, nome, email }){
 
   const inc = firebase.firestore.FieldValue.increment(1);
 
-  // 2 writes baratas (1 doc corretor + 1 doc empresa)
   await Promise.all([
-    db.collection("statsDiario").doc(docId).set({
-      ...baseCor,
-      tentativas: inc
-    }, { merge:true }),
-    db.collection("statsDiario").doc(empId).set({
-      ...baseEmp,
-      tentativas: inc
-    }, { merge:true })
+    db.collection("statsDiario").doc(docId).set({ ...baseCor, tentativas: inc }, { merge:true }),
+    db.collection("statsDiario").doc(empId).set({ ...baseEmp, tentativas: inc }, { merge:true })
   ]);
 }
 
@@ -513,9 +470,7 @@ async function bumpStatsFinalize({ day, uid, equipe, nome, email, resultado }){
   const expireAt = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_STATS_DIAS));
 
   const baseCor = {
-    day,
-    tipo: "CORRETOR",
-    corretorId: uid,
+    day, tipo:"CORRETOR", corretorId:uid,
     equipe: equipe || "equipe1",
     nome: nome || "",
     email: email || "",
@@ -525,8 +480,7 @@ async function bumpStatsFinalize({ day, uid, equipe, nome, email, resultado }){
   };
 
   const baseEmp = {
-    day,
-    tipo: "EMPRESA",
+    day, tipo:"EMPRESA",
     kindDay: `EMPRESA__${day}`,
     atualizadoEm: nowMs(),
     expireAt
@@ -542,12 +496,7 @@ async function bumpStatsFinalize({ day, uid, equipe, nome, email, resultado }){
   else if(resultado === "INTERESSADO") patchByRes.interessado = inc;
   else if(resultado === "NÃO GEROU INTERESSE") patchByRes.si = inc;
 
-  // atendidos sempre soma 1 no finalize
-  const patch = {
-    ...patchByRes,
-    atendidos: inc,
-    pontos: incPts
-  };
+  const patch = { ...patchByRes, atendidos: inc, pontos: incPts };
 
   await Promise.all([
     db.collection("statsDiario").doc(docId).set({ ...baseCor, ...patch }, { merge:true }),
@@ -560,7 +509,6 @@ async function fetchStatsCorretorHoje(){
   const snap = await db.collection("statsDiario")
     .where("kindDay","==",`CORRETOR__${day}`)
     .get();
-
   const arr = [];
   snap.forEach(d=> arr.push({ id:d.id, ...(d.data()||{}) }));
   return arr;
@@ -577,7 +525,6 @@ function renderBrand(){
     </div>
   `;
 }
-
 function renderHeader(role, email, extraHtml=""){
   return `
     ${renderBrand()}
@@ -594,7 +541,6 @@ function renderHeader(role, email, extraHtml=""){
     </div>
   `;
 }
-
 function renderTabsForRole(role){
   let tabs = [];
   if(role === "corretor"){
@@ -630,7 +576,6 @@ function renderTabsForRole(role){
     </div>
   `;
 }
-
 window.goTab = async function(tab){
   currentTab = tab;
   await renderAppShell();
@@ -681,7 +626,6 @@ function renderLogin(){
     </div>
   `;
 }
-
 window.openSignup = function(){ $("signupBox").style.display = "block"; };
 window.closeSignup = function(){ $("signupBox").style.display = "none"; };
 
@@ -745,7 +689,6 @@ function renderPendingApproval(){
     </div>
   `;
 }
-
 window.logout = async function(){ await auth.signOut(); };
 
 /** =========================
@@ -807,7 +750,6 @@ function makeLeadDoc(base){
     totalTentativas: 0,
     tentativasPorCorretor: {},
 
-    // TTL
     expireAt: exp
   };
 }
@@ -821,7 +763,6 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   const headerIndex = detectHeaderRow(rows);
   const dataRows = rows.slice(headerIndex + 1);
 
-  // 1) parse
   const parsed = [];
   for(const r of dataRows){
     const lead = mapLeadColumns(r);
@@ -831,7 +772,6 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   }
   if(parsed.length === 0) throw new Error("Nenhum lead válido (verifique colunas A/B/C).");
 
-  // 2) dedup no arquivo (SEM leitura no Firestore)
   const uniqMap = new Map();
   for(const p of parsed){
     if(!uniqMap.has(p.telefoneNorm)){
@@ -840,7 +780,6 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   }
   const uniq = Array.from(uniqMap.values());
 
-  // lista doc com TTL
   const exp = firebase.firestore.Timestamp.fromMillis(addDays(nowMs(), TTL_LEADS_DIAS));
   const listaDoc = await db.collection("listas").add({
     origem,
@@ -854,7 +793,6 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   });
   const listaRefId = listaDoc.id;
 
-  // 3) grava em batch (SEM distribuir geral)
   const batchSize = 350;
   let idx = 0;
   while(idx < uniq.length){
@@ -869,7 +807,6 @@ async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
       doc.donoUpload = donoUploadUid;
       doc.listaRef = listaRefId;
 
-      // geral agora é "bolsão": corretorId fica null
       doc.corretorId = null;
       doc.corretorEmail = null;
       doc.status = "fila";
@@ -898,19 +835,14 @@ function activeBadge(ativo){
 }
 
 /** =========================
- *  Lead picking
+ *  Lead picking (ECONOMIA REAL)
+ *  - 1 leitura por clique (doc único)
+ *  - transaction evita corrida (2 pessoas pegarem o mesmo lead)
  *  ========================= */
-function leadSortValue(x){
-  const fo = (x && typeof x.filaOrdem === "number") ? x.filaOrdem : null;
-  if(typeof fo === "number") return fo;
-  const ce = (x && typeof x.criadoEm === "number") ? x.criadoEm : 0;
-  return ce || 0;
-}
-
 async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equipeCorretor, corretorNome }){
-  let q = db.collection("leads").where("status","==","fila");
+  let q = db.collection("leads")
+    .where("status","==","fila");
 
-  // ✅ GERAL agora é "bolsão" (não depende de upload distribuir)
   if(source === "geral"){
     q = q.where("origem","==","geral").where("corretorId","==",null);
   }else if(source === "gerente"){
@@ -919,58 +851,63 @@ async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equ
     q = q.where("origem","==","corretor").where("donoUpload","==",corretorUid).where("corretorId","==",null);
   }
 
-  const snap = await q.limit(40).get();
-  if(snap.empty) return null;
-
-  const docs = snap.docs.map(d => ({ doc:d, data:(d.data()||{}) }));
-  docs.sort((a,b)=> leadSortValue(a.data) - leadSortValue(b.data));
-
-  const chosen = docs[0];
-  if(!chosen) return null;
-
-  const ref = chosen.doc.ref;
-  const data = chosen.data;
+  // ✅ ECONOMIA: 1 doc apenas
+  q = q.orderBy("filaOrdem","asc").limit(1);
 
   const agora = nowMs();
   const today = dayKey(agora);
 
-  // update lead (sem ref.get depois)
-  await ref.update({
-    status: "em_atendimento",
-    corretorId: corretorUid,
-    corretorEmail: corretorEmail || null,
-    equipe: data.equipe || equipeCorretor || null,
-    emAtendimentoEm: agora,
-    timestampDistribuicao: agora,
-    atualizadoEm: agora,
+  const result = await db.runTransaction(async (tx)=>{
+    const snap = await tx.get(q);
+    if(snap.empty) return null;
 
-    totalTentativas: firebase.firestore.FieldValue.increment(1),
-    [`tentativasPorCorretor.${corretorUid}`]: firebase.firestore.FieldValue.increment(1),
-    [`_lastTryDayByCorretor.${corretorUid}`]: today
+    const docSnap = snap.docs[0];
+    const ref = docSnap.ref;
+    const data = docSnap.data() || {};
+
+    // Se alguém já pegou, aborta
+    if(data.status !== "fila") return null;
+
+    tx.update(ref, {
+      status: "em_atendimento",
+      corretorId: corretorUid,
+      corretorEmail: corretorEmail || null,
+      equipe: data.equipe || equipeCorretor || null,
+      emAtendimentoEm: agora,
+      timestampDistribuicao: agora,
+      atualizadoEm: agora,
+
+      totalTentativas: firebase.firestore.FieldValue.increment(1),
+      [`tentativasPorCorretor.${corretorUid}`]: firebase.firestore.FieldValue.increment(1),
+      [`_lastTryDayByCorretor.${corretorUid}`]: today
+    });
+
+    const merged = {
+      ...data,
+      status:"em_atendimento",
+      corretorId:corretorUid,
+      corretorEmail:corretorEmail || null,
+      equipe: data.equipe || equipeCorretor || null,
+      emAtendimentoEm:agora,
+      timestampDistribuicao:agora,
+      atualizadoEm:agora
+    };
+
+    return { ref, data: merged };
   });
 
-  // ✅ stats barato
+  if(!result) return null;
+
+  // ✅ stats (writes pequenas)
   bumpStatsAttempt({
     day: today,
     uid: corretorUid,
-    equipe: (data.equipe || equipeCorretor || "equipe1"),
+    equipe: (result.data.equipe || equipeCorretor || "equipe1"),
     nome: corretorNome || "",
     email: corretorEmail || ""
   }).catch(()=>{});
 
-  // devolve dados locais (sem leitura extra)
-  const merged = {
-    ...data,
-    status:"em_atendimento",
-    corretorId:corretorUid,
-    corretorEmail:corretorEmail || null,
-    equipe: data.equipe || equipeCorretor || null,
-    emAtendimentoEm:agora,
-    timestampDistribuicao:agora,
-    atualizadoEm:agora
-  };
-
-  return { ref, data: merged };
+  return result;
 }
 
 /** =========================
@@ -1131,7 +1068,7 @@ async function renderAtendimento(role, user, ud){
   return `
     <div class="card">
       <div><b>Fonte de Leads</b></div>
-      <div class="small muted">Lista Geral agora é bolsão (não precisa distribuir no upload).</div>
+      <div class="small muted">Lista Geral é bolsão (sem distribuir no upload).</div>
       <div class="divider"></div>
 
       <select id="leadSource" ${disabledAttr}>
@@ -1146,7 +1083,7 @@ async function renderAtendimento(role, user, ud){
 
       <div class="divider"></div>
       <div class="small muted">
-        Dica: se estiver PAUSADO, não puxa lead.
+        Economia: pegar próximo = 1 leitura.
       </div>
     </div>
 
@@ -1165,13 +1102,20 @@ window.pegarProximoLead = async function(){
   const source = $("leadSource").value;
   const equipe = me.equipe || "equipe1";
 
-  const picked = await pickNextLeadForCorretor({
-    source,
-    corretorUid: user.uid,
-    corretorEmail: user.email,
-    corretorNome: me.nome || "",
-    equipeCorretor: equipe
-  });
+  let picked = null;
+  try{
+    picked = await pickNextLeadForCorretor({
+      source,
+      corretorUid: user.uid,
+      corretorEmail: user.email,
+      corretorNome: me.nome || "",
+      equipeCorretor: equipe
+    });
+  }catch(e){
+    // Se faltar índice, o Firestore vai acusar aqui
+    alert(e.message || e.code || e);
+    return;
+  }
 
   if(!picked){
     alert("Sem leads disponíveis nessa fonte.");
@@ -1249,7 +1193,6 @@ async function renderLeadInArea(){
 
 window.uiNaoAtendeu = async function(){
   if(!leadAtualRef) return;
-  const user = auth.currentUser;
   const me = cachedUserData;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Não pode avançar lead.");
 
@@ -1260,7 +1203,6 @@ window.uiNaoAtendeu = async function(){
 
   await leadAtualRef.update({
     status: "fila",
-    // geral: volta pro bolsão (sem corretor fixo)
     corretorId: null,
     corretorEmail: null,
     filaOrdem: novaFilaOrdem,
@@ -1399,12 +1341,10 @@ window.confirmarAtendeu = async function(resultado){
     atualizadoEm: agora
   });
 
-  // ✅ barulho dinheiro apenas para agendamento/promessa
   if(resultado === "AGENDAMENTO" || resultado === "PROMESSA DOCUMENTAÇÃO"){
     beepCash();
   }
 
-  // ✅ stats finalize
   bumpStatsFinalize({
     day: today,
     uid: auth.currentUser.uid,
@@ -1421,8 +1361,7 @@ window.confirmarAtendeu = async function(resultado){
 };
 
 /** =========================
- *  TAB: MINI CRM (econômico)
- *  Agora é resumo do dia (stats), sem listar clientes.
+ *  MINI CRM (resumo do dia via stats)
  *  ========================= */
 async function renderMiniCRM(role, user, ud){
   return `
@@ -1430,7 +1369,7 @@ async function renderMiniCRM(role, user, ud){
       <div class="row">
         <div class="grow">
           <div><b>Mini CRM (Resumo do dia)</b></div>
-          <div class="small muted">Economia: não lista clientes. Usa statsDiario.</div>
+          <div class="small muted">Economia: usa statsDiario (não lista clientes).</div>
         </div>
         <button class="btn btnGold" style="max-width:220px" onclick="loadMiniCRM()">ATUALIZAR</button>
       </div>
@@ -1450,7 +1389,6 @@ window.loadMiniCRM = async function(){
     const me = cachedUserData || await getUserDoc(user.uid);
     const role = me.role;
 
-    // gate (diretor livre)
     const g = canViewOncePerDay({ uid:user.uid, role, feature:"MINI_CRM" });
     if(!g.ok){
       box.innerHTML = `<div class="errorBox">${g.reason}</div>`;
@@ -1458,6 +1396,7 @@ window.loadMiniCRM = async function(){
     }
 
     const day = dayKey(nowMs());
+
     if(role === "corretor"){
       const docId = statsDocIdCorretor(day, user.uid);
       const snap = await db.collection("statsDiario").doc(docId).get();
@@ -1483,15 +1422,12 @@ window.loadMiniCRM = async function(){
       return;
     }
 
-    // gerente/diretor: resumo empresa + (gerente filtra equipe na tela)
     const stats = await fetchStatsCorretorHoje();
     const equipe = me.equipe || "equipe1";
-
     let scoped = stats;
     if(role === "gerente"){
       scoped = stats.filter(x => (x.equipe||"") === equipe);
     }
-
     const sum = (key)=> scoped.reduce((a,x)=> a + Number(x[key]||0), 0);
 
     box.innerHTML = `
@@ -1512,7 +1448,7 @@ window.loadMiniCRM = async function(){
 };
 
 /** =========================
- *  TAB: RESULTADOS (Relatório econômico)
+ *  RESULTADOS (excel via stats)
  *  ========================= */
 async function renderResultados(role, user, ud){
   if(role === "corretor"){
@@ -1531,7 +1467,7 @@ async function renderResultados(role, user, ud){
   return `
     <div class="card">
       <div><b>Relatórios e Rankings (Economia)</b></div>
-      <div class="small muted">Relatório Excel usa statsDiario (não varre leads).</div>
+      <div class="small muted">Excel usa statsDiario (não varre leads).</div>
       <div class="divider"></div>
 
       <div class="grid2">
@@ -1553,13 +1489,12 @@ async function renderResultados(role, user, ud){
       </div>
 
       <div class="divider"></div>
-      <div id="resultsBox" class="muted">Selecione período (até 7 dias recomendado) e gere.</div>
+      <div id="resultsBox" class="muted">Selecione período e gere.</div>
     </div>
   `;
 }
 
 async function fetchStatsRangeByDays(daysList){
-  // Faz 1 query por dia (barato: ~30 docs/dia)
   const all = [];
   for(const day of daysList){
     const snap = await db.collection("statsDiario")
@@ -1569,7 +1504,6 @@ async function fetchStatsRangeByDays(daysList){
   }
   return all;
 }
-
 function isoListDays(de, ate){
   const start = rangeToTs(de, false);
   const end = rangeToTs(ate, false);
@@ -1600,19 +1534,17 @@ window.gerarRelatorioExcelEconomico = async function(){
 
     const days = isoListDays(de, ate);
     if(days.length > 7){
-      alert("Recomendação: máximo 7 dias para manter economia (você pode gerar por semanas).");
+      alert("Recomendação: máximo 7 dias para manter economia (gere por semanas).");
     }
 
     const stats = await fetchStatsRangeByDays(days);
 
-    // scope gerente = equipe
     const equipe = me.equipe || "equipe1";
     let scoped = stats;
     if(role === "gerente"){
       scoped = stats.filter(x => (x.equipe||"") === equipe);
     }
 
-    // agrega por corretorId
     const by = {};
     for(const s of scoped){
       const cid = s.corretorId || "";
@@ -1643,7 +1575,6 @@ window.gerarRelatorioExcelEconomico = async function(){
     const rows = Object.values(by);
     rows.sort((a,b)=> (b.Pontos - a.Pontos) || (b.Agendamentos - a.Agendamentos) || (b.Promessas - a.Promessas));
 
-    // Resumo
     const total = (k)=> rows.reduce((a,x)=> a + Number(x[k]||0), 0);
 
     const resumo = [
@@ -1706,10 +1637,7 @@ window.loadTop5 = async function(){
     const equipe = me.equipe || "equipe1";
     const stats = await fetchStatsCorretorHoje();
 
-    // empresa
     const empresa = stats.slice().sort((a,b)=> (Number(b.pontos||0) - Number(a.pontos||0))).slice(0,5);
-
-    // equipe
     const eq = stats.filter(x=> (x.equipe||"") === equipe)
       .sort((a,b)=> (Number(b.pontos||0) - Number(a.pontos||0)))
       .slice(0,5);
@@ -1749,7 +1677,7 @@ window.loadTop5 = async function(){
       <div><b>Top 5 Equipe (${equipe})</b></div>
       ${renderList(eq)}
       <div class="small muted" style="margin-top:10px">
-        Economia: Top5 usa <b>statsDiario</b> (não varre leads).
+        Economia: Top5 usa <b>statsDiario</b>.
       </div>
     `;
   }catch(e){
@@ -1758,10 +1686,7 @@ window.loadTop5 = async function(){
 };
 
 /** =========================
- *  TAB: CONFIG (limpeza)
- *  - Corretor: mensagem + upload minha lista
- *  - Gerente: upload lista equipe
- *  - Diretor: upload lista geral (sem distribuir)
+ *  CONFIG (uploads + msg)
  *  ========================= */
 async function renderConfig(role, user, ud){
   let html = ``;
@@ -1779,7 +1704,7 @@ async function renderConfig(role, user, ud){
 
       <div class="card">
         <div><b>Upload • Minha Lista (Corretor)</b></div>
-        <div class="small muted">XLS/XLSX/CSV (A: Nome, B: Telefone, C: Email) • Dedup no arquivo</div>
+        <div class="small muted">Dedup no arquivo • TTL via expireAt</div>
         <div class="divider"></div>
         <input type="file" id="fileCorretor" accept=".xls,.xlsx,.csv" />
         <button class="btn btnBlue" onclick="uploadListaCorretor()">ENVIAR MINHA LISTA</button>
@@ -1800,7 +1725,7 @@ async function renderConfig(role, user, ud){
     html += `
       <div class="card">
         <div><b>Upload • Lista Geral (Diretoria)</b></div>
-        <div class="small muted">Agora é bolsão: não distribui no upload. Dedup no arquivo.</div>
+        <div class="small muted">Bolsão • Dedup no arquivo</div>
         <div class="divider"></div>
         <input type="file" id="fileDiretor" accept=".xls,.xlsx,.csv" />
         <button class="btn btnGold" onclick="uploadListaGeral()">ENVIAR PARA O BOLSÃO</button>
@@ -1812,8 +1737,8 @@ async function renderConfig(role, user, ud){
     <div class="card">
       <div><b>TTL / Auto-limpeza</b></div>
       <div class="small muted">
-        Os docs de <b>leads</b> e <b>listas</b> já vão com <b>expireAt</b> (TTL ${TTL_LEADS_DIAS} dias).<br/>
-        Ative TTL no Firebase para apagar sozinho sem você fazer nada.
+        Leads/Listas já vão com <b>expireAt</b> (TTL ${TTL_LEADS_DIAS} dias).<br/>
+        Ative TTL no Firebase/Cloud para apagar sozinho.
       </div>
     </div>
   `;
@@ -1837,7 +1762,7 @@ window.uploadListaGeral = async function(){
   if(me.role !== "diretor") return alert("Apenas DIRETOR pode subir lista geral.");
   try{
     const r = await uploadLeadsFromFile({ file, origem:"geral", equipe:null, donoUploadUid:user.uid });
-    alert(`Lista geral enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
+    alert(`Lista geral enviada!\nRecebido: ${r.totalRecebido}\nÚnicos: ${r.totalUnico}`);
     $("fileDiretor").value = "";
   }catch(e){
     alert(e.message || e.code);
@@ -1853,7 +1778,7 @@ window.uploadListaGerente = async function(){
   try{
     const equipe = me.equipe || "equipe1";
     const r = await uploadLeadsFromFile({ file, origem:"gerente", equipe, donoUploadUid:user.uid });
-    alert(`Lista da equipe enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
+    alert(`Lista da equipe enviada!\nRecebido: ${r.totalRecebido}\nÚnicos: ${r.totalUnico}`);
     $("fileGerente").value = "";
   }catch(e){
     alert(e.message || e.code);
@@ -1869,7 +1794,7 @@ window.uploadListaCorretor = async function(){
   try{
     const equipe = me.equipe || "equipe1";
     const r = await uploadLeadsFromFile({ file, origem:"corretor", equipe, donoUploadUid:user.uid });
-    alert(`Sua lista foi enviada!\nRecebido: ${r.totalRecebido}\nÚnicos (dedup no arquivo): ${r.totalUnico}`);
+    alert(`Sua lista foi enviada!\nRecebido: ${r.totalRecebido}\nÚnicos: ${r.totalUnico}`);
     $("fileCorretor").value = "";
   }catch(e){
     alert(e.message || e.code);
@@ -1877,7 +1802,7 @@ window.uploadListaCorretor = async function(){
 };
 
 /** =========================
- *  TAB: APROVAÇÃO
+ *  APROVAÇÃO
  *  ========================= */
 async function renderAprovacao(role, user, ud){
   if(role !== "diretor" && role !== "gerente"){
