@@ -744,28 +744,85 @@ function renderPendingApproval(){
 window.logout = async function(){ await auth.signOut(); };
 
 /** =========================
- *  LEADS: upload/import (dedup no arquivo)
+ *  ✅ LEADS: upload/import (dedup no arquivo)
+ *  CORREÇÃO: lê 1000+ linhas, suporta telefone como número, científico, ".0"
+ *  CORREÇÃO: reconhece colunas por CABEÇALHO (nome/telefone/email)
  *  ========================= */
 function parseSheetRows(workbook){
   const sheetName = workbook.SheetNames[0];
   const ws = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+
+  // ✅ raw:true para evitar perder telefones
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
   const clean = rows.filter(r => r && r.some(cell => String(cell).trim() !== ""));
   return clean;
 }
+
 function detectHeaderRow(rows){
-  const keys = ["nome","telefone","celular","contato","email","e-mail"];
-  for(let i=0;i<Math.min(5, rows.length);i++){
+  const keys = ["nome","telefone","celular","contato","whatsapp","fone","email","e-mail"];
+  const maxScan = Math.min(30, rows.length);
+
+  for(let i=0;i<maxScan;i++){
     const row = rows[i].map(c=>String(c).toLowerCase().trim());
     const hit = row.some(c => keys.includes(c));
     if(hit) return i;
   }
   return 0;
 }
-function mapLeadColumns(row){
-  const nome = String(row[0] || "").trim();
-  const telefone = String(row[1] || "").trim();
-  const email = String(row[2] || "").trim();
+
+function cellToText(v){
+  if(v === null || v === undefined) return "";
+  if(typeof v === "string") return v.trim();
+  if(typeof v === "number"){
+    return String(Math.trunc(v));
+  }
+  return String(v).trim();
+}
+
+function normalizeExcelPhone(raw){
+  let s = cellToText(raw);
+
+  // remove ".0"
+  if(/^\d+\.0$/.test(s)) s = s.replace(".0","");
+
+  // notação científica em string
+  if(/[eE]\+?/.test(s)){
+    const n = Number(s);
+    if(Number.isFinite(n)){
+      s = String(Math.trunc(n));
+    }
+  }
+
+  return s;
+}
+
+function buildColumnMap(headerRow){
+  const map = { nome:0, telefone:1, email:2 }; // fallback
+  const norm = headerRow.map(h => String(h).toLowerCase().trim());
+
+  const find = (cands)=>{
+    for(const c of cands){
+      const idx = norm.findIndex(x => x === c || x.includes(c));
+      if(idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const idxNome = find(["nome","cliente","contato"]);
+  const idxTel  = find(["telefone","celular","whatsapp","fone"]);
+  const idxMail = find(["email","e-mail","e mail"]);
+
+  if(idxNome >= 0) map.nome = idxNome;
+  if(idxTel  >= 0) map.telefone = idxTel;
+  if(idxMail >= 0) map.email = idxMail;
+
+  return map;
+}
+
+function mapLeadColumns(row, colMap){
+  const nome = cellToText(row[colMap.nome] || "");
+  const telefone = normalizeExcelPhone(row[colMap.telefone] || "");
+  const email = cellToText(row[colMap.email] || "");
   return { nome, telefone, email };
 }
 
@@ -808,22 +865,32 @@ function makeLeadDoc(base){
 
 async function uploadLeadsFromFile({ file, origem, equipe, donoUploadUid }){
   const arrayBuffer = await file.arrayBuffer();
+
+  // ✅ type array + sem perder valores
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
   const rows = parseSheetRows(workbook);
   if(rows.length === 0) throw new Error("Planilha vazia.");
 
   const headerIndex = detectHeaderRow(rows);
+  const headerRow = rows[headerIndex] || [];
+  const colMap = buildColumnMap(headerRow);
+
   const dataRows = rows.slice(headerIndex + 1);
 
   const parsed = [];
   for(const r of dataRows){
-    const lead = mapLeadColumns(r);
+    const lead = mapLeadColumns(r, colMap);
     const telN = normalizePhone(lead.telefone);
     if(!telN) continue;
     parsed.push({ ...lead, telefoneNorm: telN });
   }
-  if(parsed.length === 0) throw new Error("Nenhum lead válido (verifique colunas A/B/C).");
 
+  if(parsed.length === 0){
+    throw new Error("Nenhum lead válido. Verifique a coluna de telefone (DDD+Número) e o cabeçalho.");
+  }
+
+  // ✅ dedup dentro do arquivo por telefoneNorm
   const uniqMap = new Map();
   for(const p of parsed){
     if(!uniqMap.has(p.telefoneNorm)){
@@ -1027,7 +1094,6 @@ async function renderAppShell(){
 
   $("app").innerHTML = html;
 
-  // ✅ se já existe lead retomado, renderiza ele
   if(currentTab === "atendimento" && leadAtualRef && leadAtualData){
     try{ await renderLeadInArea(); }catch(e){}
   }
@@ -1159,7 +1225,6 @@ window.pegarProximoLead = async function(){
   const me = cachedUserData;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Clique em ESTOU ATIVO primeiro.");
 
-  // ✅ se existe lead preso comigo no Firebase, retoma em vez de puxar outro
   try{
     const resumed = await tryResumeMyLead(user, me);
     if(resumed && leadAtualRef){
@@ -1300,10 +1365,7 @@ window.forceReleaseMyLead = async function(){
 };
 
 /** =========================================================
- * ✅ CORREÇÃO 1: NÃO ATENDEU
- * - Transaction para garantir que o doc ainda é "meu"
- * - Limpa UI imediatamente
- * - Puxa próximo sempre
+ * ✅ CORREÇÃO 1: NÃO ATENDEU (não fica no mesmo lead)
  * ========================================================= */
 window.uiNaoAtendeu = async function(){
   if(!leadAtualRef) return;
@@ -1315,7 +1377,6 @@ window.uiNaoAtendeu = async function(){
   const ok = await openModal("Confirmar", `Marcar como NÃO ATENDEU e esconder por ${NAO_ATENDEU_COOLDOWN_MIN} min?`);
   if(!ok) return;
 
-  // limpa UI imediatamente (para não “parecer que ficou no mesmo lead”)
   setLeadAreaMsg(`<div class="center muted">Lead marcado como NÃO ATENDEU. Pegando outro...</div>`);
 
   const agora = nowMs();
@@ -1329,11 +1390,8 @@ window.uiNaoAtendeu = async function(){
       if(!snap.exists) return;
 
       const d = snap.data() || {};
-
-      // se ainda está comigo e em atendimento, ok
       const stillMine = (d.corretorId === user.uid) && (d.status === "em_atendimento");
 
-      // Se não estiver comigo, não força, mas ainda limpa local
       if(stillMine){
         tx.update(ref, {
           status: "fila",
@@ -1353,11 +1411,9 @@ window.uiNaoAtendeu = async function(){
     });
 
   }catch(e){
-    // mesmo com erro, não deixa o app preso no mesmo lead
     console.warn("uiNaoAtendeu transaction error:", e);
   }
 
-  // limpa estado local e busca outro SEMPRE
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
@@ -1440,9 +1496,7 @@ window.toggleCollapse = function(id){
 };
 
 /** =========================================================
- * ✅ CORREÇÃO 2: FINALIZAR (ATENDEU)
- * - Após finalizar, limpa e puxa próximo automaticamente
- * - Também com transaction “a prova de travar”
+ * ✅ CORREÇÃO 2: FINALIZAR (ATENDEU) puxa próximo automaticamente
  * ========================================================= */
 window.confirmarAtendeu = async function(resultado){
   if(!leadAtualRef) return;
@@ -1474,7 +1528,6 @@ window.confirmarAtendeu = async function(resultado){
   const ok = await openModal("Confirmar", `Finalizar como: ${resultado}?`);
   if(!ok) return;
 
-  // já mostra status na UI pra não parecer “travado”
   setLeadAreaMsg(`<div class="center muted">Finalizando atendimento... Pegando próximo lead...</div>`);
 
   const agora = nowMs();
@@ -1490,7 +1543,6 @@ window.confirmarAtendeu = async function(resultado){
       const d = snap.data() || {};
       const stillMine = (d.corretorId === user.uid) && (d.status === "em_atendimento");
 
-      // Se por algum motivo não estiver mais comigo, não quebra o app
       if(stillMine){
         tx.update(ref, {
           status: "finalizado",
@@ -1521,7 +1573,6 @@ window.confirmarAtendeu = async function(resultado){
     resultado
   }).catch(()=>{});
 
-  // limpa local e puxa próximo SEMPRE
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
@@ -1533,8 +1584,10 @@ window.confirmarAtendeu = async function(resultado){
   }
 };
 
-// ====== (restante do seu código: MiniCRM, Resultados, Top5, Config, Aprovação) ======
-// Mantido igual ao seu arquivo.
+/** =========================
+ *  (restante do seu código: MiniCRM, Resultados, Top5, Config, Aprovação)
+ *  Mantido igual ao seu arquivo original
+ *  ========================= */
 
 async function renderMiniCRM(role, user, ud){
   return `
@@ -2085,7 +2138,6 @@ auth.onAuthStateChanged(async (user)=>{
     return;
   }
 
-  // ✅ tenta retomar lead do corretor ao abrir
   try{
     await tryResumeMyLead(user, cachedUserData);
   }catch(e){}
