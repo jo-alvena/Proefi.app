@@ -325,6 +325,11 @@ function $(id){ return document.getElementById(id); }
 function nowMs(){ return Date.now(); }
 function safe(v){ return (v===undefined || v===null) ? "" : String(v); }
 
+function setLeadAreaMsg(html){
+  const area = $("leadArea");
+  if(area) area.innerHTML = html;
+}
+
 function dayKey(ts){
   const d = new Date(ts);
   const y = d.getFullYear();
@@ -425,15 +430,12 @@ function closeModal(ok){
 }
 
 /** =========================
- *  ✅ NOVO: Retomar lead preso ao abrir o app
- *  - se existir lead em_atendimento do corretor, retoma
- *  - se estiver "velho" demais, devolve pra fila
+ *  ✅ Retomar lead preso ao abrir o app
  *  ========================= */
 async function tryResumeMyLead(user, me){
   if(!user || !me) return false;
   if((me.role||"") !== "corretor") return false;
 
-  // se já tem lead em memória, nada a fazer
   if(leadAtualRef) return true;
 
   const snap = await db.collection("leads")
@@ -451,25 +453,21 @@ async function tryResumeMyLead(user, me){
   const emAt = Number(data.emAtendimentoEm || 0);
   const ageMs = nowMs() - emAt;
 
-  // se travou por muito tempo, devolve pra fila
   if(emAt && ageMs > (STALE_LEAD_RELEASE_MIN * 60 * 1000)){
     await ref.update({
       status: "fila",
       corretorId: null,
       corretorEmail: null,
       emAtendimentoEm: null,
-      filaOrdem: nowMs(), // volta para fila com ordem atual
+      filaOrdem: nowMs(),
       atualizadoEm: nowMs()
     });
     return false;
   }
 
-  // retoma
   leadAtualRef = ref;
   leadAtualData = data;
   detailsOpen = false;
-
-  // manda para a aba Atendimento
   currentTab = "atendimento";
   return true;
 }
@@ -890,9 +888,6 @@ function activeBadge(ativo){
 
 /** =========================
  *  Lead picking (ECONOMIA REAL) - FIX COMPAT
- *  - query (limit 1) fora da transaction
- *  - transaction em DocumentReference
- *  - retry leve
  *  ========================= */
 async function pickNextLeadForCorretor({ source, corretorUid, corretorEmail, equipeCorretor, corretorNome }){
   let q = db.collection("leads")
@@ -1272,7 +1267,7 @@ async function renderLeadInArea(){
   `;
 }
 
-// ✅ NOVO: destravar manual (seguro)
+// ✅ destravar manual (seguro)
 window.forceReleaseMyLead = async function(){
   try{
     if(!leadAtualRef){
@@ -1304,42 +1299,73 @@ window.forceReleaseMyLead = async function(){
   }
 };
 
+/** =========================================================
+ * ✅ CORREÇÃO 1: NÃO ATENDEU
+ * - Transaction para garantir que o doc ainda é "meu"
+ * - Limpa UI imediatamente
+ * - Puxa próximo sempre
+ * ========================================================= */
 window.uiNaoAtendeu = async function(){
   if(!leadAtualRef) return;
+
   const me = cachedUserData;
+  const user = auth.currentUser;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Não pode avançar lead.");
 
   const ok = await openModal("Confirmar", `Marcar como NÃO ATENDEU e esconder por ${NAO_ATENDEU_COOLDOWN_MIN} min?`);
   if(!ok) return;
 
-  // ✅ COOLDOWN REAL (não volta no mesmo)
-  const novaFilaOrdem = nowMs() + (NAO_ATENDEU_COOLDOWN_MIN * 60 * 1000);
+  // limpa UI imediatamente (para não “parecer que ficou no mesmo lead”)
+  setLeadAreaMsg(`<div class="center muted">Lead marcado como NÃO ATENDEU. Pegando outro...</div>`);
 
-  await leadAtualRef.update({
-    status: "fila",
-    corretorId: null,
-    corretorEmail: null,
-    filaOrdem: novaFilaOrdem,
+  const agora = nowMs();
+  const novaFilaOrdem = agora + (NAO_ATENDEU_COOLDOWN_MIN * 60 * 1000);
 
-    emAtendimentoEm: null,
-    timestampFinalizacao: null,
-    atendeu: false,
-    resultado: null,
-    observacao: null,
-    dataAgendada: null,
-    atualizadoEm: nowMs()
-  });
+  try{
+    const ref = leadAtualRef;
 
+    await db.runTransaction(async (tx)=>{
+      const snap = await tx.get(ref);
+      if(!snap.exists) return;
+
+      const d = snap.data() || {};
+
+      // se ainda está comigo e em atendimento, ok
+      const stillMine = (d.corretorId === user.uid) && (d.status === "em_atendimento");
+
+      // Se não estiver comigo, não força, mas ainda limpa local
+      if(stillMine){
+        tx.update(ref, {
+          status: "fila",
+          corretorId: null,
+          corretorEmail: null,
+          filaOrdem: novaFilaOrdem,
+
+          emAtendimentoEm: null,
+          timestampFinalizacao: null,
+          atendeu: false,
+          resultado: null,
+          observacao: null,
+          dataAgendada: null,
+          atualizadoEm: agora
+        });
+      }
+    });
+
+  }catch(e){
+    // mesmo com erro, não deixa o app preso no mesmo lead
+    console.warn("uiNaoAtendeu transaction error:", e);
+  }
+
+  // limpa estado local e busca outro SEMPRE
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
 
-  $("leadArea").innerHTML = `<div class="center muted">Lead colocado em cooldown. Pegando outro...</div>`;
-
   try{
     await pegarProximoLead();
   }catch(e){
-    $("leadArea").innerHTML = `<div class="center muted">Sem novo lead disponível agora.</div>`;
+    setLeadAreaMsg(`<div class="center muted">Sem novo lead disponível agora.</div>`);
   }
 };
 
@@ -1413,9 +1439,15 @@ window.toggleCollapse = function(id){
   if(!open) el.classList.add("open");
 };
 
+/** =========================================================
+ * ✅ CORREÇÃO 2: FINALIZAR (ATENDEU)
+ * - Após finalizar, limpa e puxa próximo automaticamente
+ * - Também com transaction “a prova de travar”
+ * ========================================================= */
 window.confirmarAtendeu = async function(resultado){
   if(!leadAtualRef) return;
   const me = cachedUserData;
+  const user = auth.currentUser;
   if(!me || !me.ativo) return alert("Você está PAUSADO. Não pode finalizar.");
 
   let dataAgendada = null;
@@ -1442,18 +1474,39 @@ window.confirmarAtendeu = async function(resultado){
   const ok = await openModal("Confirmar", `Finalizar como: ${resultado}?`);
   if(!ok) return;
 
+  // já mostra status na UI pra não parecer “travado”
+  setLeadAreaMsg(`<div class="center muted">Finalizando atendimento... Pegando próximo lead...</div>`);
+
   const agora = nowMs();
   const today = dayKey(agora);
 
-  await leadAtualRef.update({
-    status: "finalizado",
-    atendeu: true,
-    resultado,
-    observacao: obs || null,
-    dataAgendada: dataAgendada,
-    timestampFinalizacao: agora,
-    atualizadoEm: agora
-  });
+  try{
+    const ref = leadAtualRef;
+
+    await db.runTransaction(async (tx)=>{
+      const snap = await tx.get(ref);
+      if(!snap.exists) return;
+
+      const d = snap.data() || {};
+      const stillMine = (d.corretorId === user.uid) && (d.status === "em_atendimento");
+
+      // Se por algum motivo não estiver mais comigo, não quebra o app
+      if(stillMine){
+        tx.update(ref, {
+          status: "finalizado",
+          atendeu: true,
+          resultado,
+          observacao: obs || null,
+          dataAgendada: dataAgendada,
+          timestampFinalizacao: agora,
+          atualizadoEm: agora
+        });
+      }
+    });
+
+  }catch(e){
+    console.warn("confirmarAtendeu transaction error:", e);
+  }
 
   if(resultado === "AGENDAMENTO" || resultado === "PROMESSA DOCUMENTAÇÃO"){
     beepCash();
@@ -1461,21 +1514,27 @@ window.confirmarAtendeu = async function(resultado){
 
   bumpStatsFinalize({
     day: today,
-    uid: auth.currentUser.uid,
+    uid: user.uid,
     equipe: me.equipe || "equipe1",
     nome: me.nome || "",
-    email: auth.currentUser.email || "",
+    email: user.email || "",
     resultado
   }).catch(()=>{});
 
+  // limpa local e puxa próximo SEMPRE
   leadAtualRef = null;
   leadAtualData = null;
   detailsOpen = false;
-  $("leadArea").innerHTML = `<div class="center ok">Atendimento finalizado! Pegue o próximo.</div>`;
+
+  try{
+    await pegarProximoLead();
+  }catch(e){
+    setLeadAreaMsg(`<div class="center ok">Atendimento finalizado! Sem novo lead agora.</div>`);
+  }
 };
 
 // ====== (restante do seu código: MiniCRM, Resultados, Top5, Config, Aprovação) ======
-// Para não quebrar nada, mantive exatamente as mesmas funções do seu arquivo anterior abaixo.
+// Mantido igual ao seu arquivo.
 
 async function renderMiniCRM(role, user, ud){
   return `
@@ -2026,7 +2085,7 @@ auth.onAuthStateChanged(async (user)=>{
     return;
   }
 
-  // ✅ NOVO: tenta retomar lead do corretor ao abrir
+  // ✅ tenta retomar lead do corretor ao abrir
   try{
     await tryResumeMyLead(user, cachedUserData);
   }catch(e){}
